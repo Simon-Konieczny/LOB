@@ -107,7 +107,7 @@ private:
 class OrderBook
 {
 public:
-    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(10000) {}
+    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000) {}
 
     void addOrder(uint64_t id, int64_t price, uint32_t quantity, Side side);
 

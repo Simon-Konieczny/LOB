@@ -2,9 +2,14 @@
 A deterministic, ultra-low latency Matching Engine designed for HFT applications. Optimized for the Apple M4 Pro architecture using custom memory management and cache-friendly data structures.
 
 ## 🚀 Performance Metrics (M4 Pro)
-- Average Latency: ~85ns
-- p99 Tail Latency: ~140ns
+- Average Latency: `~22ns`
+- p50: `0ns`
+- p99: `1us`
+- p99.9 Tail Latency: `1us`
 - Throughput: >10M orders/second
+
+`std::chrono::high_resolution_clock` on macOS forms a bottleneck depending on kernel state cause invalid `p50` metric. Using memory fencing ensures that the average latency is not inflated by out-of-order instruction execution, which is common on Apple Silicon.
+
 
 ## 🛠 Key Architecture Decisions
 - O(1) Order Operations: Uses a `std::unordered_map` for order lookup combined with a Custom Doubly Linked List embedded in the Order struct. This allows for $O(1)$ cancellations without searching price levels.

@@ -1,4 +1,4 @@
 add_executable(unit_tests orderbook_test.cpp)
-target_link_libraries(unit_tests PRIVATE OrderBook_lib gtest_main)
+target_link_libraries(unit_tests PRIVATE lob_core gtest_main)
 include(GoogleTest)
 gtest_discover_tests(unit_tests)

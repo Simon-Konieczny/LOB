@@ -1,6 +1,10 @@
 //
 // Created by Simon Konieczny on 19/02/2026.
 //
+#ifdef __APPLE__
+#include <stddef.h>
+typedef size_t rsize_t;
+#endif
 
 #include <iostream>
 

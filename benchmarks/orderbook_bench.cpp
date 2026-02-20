@@ -28,7 +28,11 @@ void run_latency_test(int iterations = 100000) {
     for (int i = 0; i < iterations; ++i) {
         auto start = std::chrono::high_resolution_clock::now();
 
+        asm volatile("" ::: "memory");
+
         book.addOrder(200000 + i, 100, 1, Side::Buy);
+
+        asm volatile("" ::: "memory");
 
         auto end = std::chrono::high_resolution_clock::now();
         auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();

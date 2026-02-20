@@ -1,6 +1,9 @@
 # High-Performance Limit Order Book (C++)
 A deterministic, ultra-low latency Matching Engine designed for HFT applications. Optimized for the Apple M4 Pro architecture using custom memory management and cache-friendly data structures.
 
+Demo set up in `src/main.cpp` captures snapshots of the book:
+![demo_image](demo/demo.png)
+
 ## 🚀 Performance Metrics (M4 Pro)
 - Average Latency: `~22ns`
 - p50: `0ns`

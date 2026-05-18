@@ -11,40 +11,30 @@ protected:
     OrderBook book;
 };
 
-// Test 1: Simple limit order addition (resting in book)
+// Test 1: Simple limit order addition
 TEST_F(OrderBookTest, AddRestingOrder) {
     book.addOrder(1, 100, 10, Side::Buy);
 
     EXPECT_EQ(book.getBestBid(), 100);
 }
 
-// Test 2: Basic Matching logic (The "Crossing" Test)
+// Test 2: Basic Matching logic
 TEST_F(OrderBookTest, SimpleMatch) {
-    // 1. Add a resting Sell order (Maker) at $100
     book.addOrder(1, 100, 10, Side::Sell);
 
-    // 2. Add an incoming Buy order (Taker) at $101
-    // This should match instantly because 101 >= 100
     book.addOrder(2, 101, 10, Side::Buy);
 
-    // 3. Verification:
     // Both orders should be fully filled and removed from the book.
-    // Therefore, Best Bid and Best Ask should be 0 (or your "empty" value)
     EXPECT_EQ(book.getBestBid(), 0);
     EXPECT_EQ(book.getBestAsk(), 0);
 }
 
 // Test 3: Partial Fill
 TEST_F(OrderBookTest, PartialFill) {
-    // Sell 100 units at $100
     book.addOrder(1, 100, 100, Side::Sell);
 
-    // Buy only 40 units at $100
     book.addOrder(2, 100, 40, Side::Buy);
 
-    // After match, there should still be 60 units left on the Sell side
-    // We can add a helper method to OrderBook to get volume at a price to check this
-    // For now, we check that Best Ask is still $100
     EXPECT_EQ(book.getBestAsk(), 100);
 }
 
@@ -64,4 +54,25 @@ TEST_F(OrderBookTest, ObserverTest) {
     testBook.addOrder(2, 100, 10, Side::Buy);
 
     EXPECT_EQ(myObserver.tradeCount, 1);
+}
+
+// Order Pool Growth
+TEST_F(OrderBookTest, OrderPoolGrowthAndPointerStability)
+{
+    const int initial_orders = 100000;
+    const int expansion_orders = 250000;
+
+    for (int i = 1; i <= initial_orders; i++) {
+        book.addOrder(i, 100, 10, Side::Sell);
+    }
+
+    for (int i = initial_orders + 1; i <= expansion_orders; i++) {
+        book.addOrder(i, 105, 10, Side::Sell);
+    }
+
+    auto* firstOrder = book.getOrder(1);
+    ASSERT_NE(firstOrder, nullptr);
+    EXPECT_EQ(firstOrder->id, 1);
+    EXPECT_EQ(firstOrder->price, 100);
+    EXPECT_EQ(firstOrder->quantity, 10);
 }

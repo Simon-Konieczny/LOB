@@ -55,6 +55,8 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
         Order* maker = level->head;
         uint32_t fillQty = std::min(taker->quantity, maker->quantity);
 
+        lastTradePrice = maker->price;
+
         if (observer)
         {
             observer->onTrade(maker->id, taker->id, fillQty, maker->price);
@@ -94,7 +96,7 @@ void OrderBook::cancelOrder(uint64_t id) {
 
         if (!level->head)
         {
-            bids.erase(order->price);
+            asks.erase(order->price);
             delete level;
         }
     }
@@ -103,8 +105,16 @@ void OrderBook::cancelOrder(uint64_t id) {
     pool.release(order);
 }
 
+Order* OrderBook::getOrder(uint64_t id)
+{
+    const auto it = orderMap.find(id);
+    if (it == orderMap.end()) return nullptr;
+    return it->second;
+}
+
 BookSnapshot OrderBook::getSnapshot(int depth) {
     BookSnapshot snapshot;
+    snapshot.lastTradePrice = lastTradePrice;
 
     int count = 0;
     for (auto const& [price, level] : bids) {

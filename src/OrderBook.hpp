@@ -20,6 +20,7 @@ struct LevelInfo {
 struct BookSnapshot {
     std::vector<LevelInfo> bids;
     std::vector<LevelInfo> asks;
+    int64_t lastTradePrice = 0;
 };
 
 struct Order {
@@ -76,21 +77,25 @@ struct LimitLevel {
 
 class OrderPool {
 public:
-    explicit OrderPool(size_t capacity) {
-        storage.reserve(capacity);
-        // Pre-allocate all objects
-        for (size_t i = 0; i < capacity; ++i) {
-            storage.emplace_back(0, 0, 0, Side::Buy);
-            freeList.push_back(&storage.back());
-        }
+    explicit OrderPool(size_t initial_capacity) : chunkSize(initial_capacity) {
+        grow();
     }
 
+    OrderPool(const OrderPool&) = delete;
+    OrderPool& operator=(const OrderPool&) = delete;
+
     Order* acquire(uint64_t id, int64_t price, uint32_t qty, Side side) {
-        if (freeList.empty()) return nullptr; // handle expansion
+        if (freeList.empty()) {
+            grow(); // Automatically and safely expand memory
+        }
+
         Order* o = freeList.back();
         freeList.pop_back();
 
-        o->id = id; o->price = price; o->quantity = qty; o->side = side;
+        o->id = id;
+        o->price = price;
+        o->quantity = qty;
+        o->side = side;
         o->next = o->prev = nullptr;
         return o;
     }
@@ -100,18 +105,39 @@ public:
     }
 
 private:
-    std::vector<Order> storage;
+    void grow() {
+        std::vector<Order> newChunk;
+        newChunk.reserve(chunkSize);
+        for (size_t i = 0; i < chunkSize; ++i) {
+            newChunk.emplace_back(0, 0, 0, Side::Buy);
+        }
+
+        chunks.push_back(std::move(newChunk));
+
+        auto& allocatedChunk = chunks.back();
+        for (size_t i = 0; i < chunkSize; ++i) {
+            freeList.push_back(&allocatedChunk[i]);
+        }
+
+        // geometric growth
+        chunkSize *= 2;
+    }
+
+    size_t chunkSize;
+    std::vector<std::vector<Order>> chunks; // Multi-chunk storage to guarantee pointer stability
     std::vector<Order*> freeList;
 };
 
 class OrderBook
 {
 public:
-    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000) {}
+    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), lastTradePrice(0) {}
 
     void addOrder(uint64_t id, int64_t price, uint32_t quantity, Side side);
 
     void cancelOrder(uint64_t id);
+
+    Order* getOrder(uint64_t id);
 
     int64_t getBestBid() const {
         if (bids.empty()) return 0;
@@ -125,6 +151,8 @@ public:
 
     BookSnapshot getSnapshot(int depth);
 
+    int64_t getLastTradePrice() const {return lastTradePrice;}
+
 private:
     ITradeObserver* observer;
     OrderPool pool;
@@ -132,6 +160,8 @@ private:
     std::map<int64_t, LimitLevel*, std::less<>> asks;
 
     std::unordered_map<uint64_t, Order*> orderMap;
+
+    int64_t lastTradePrice;
 
     void match(Order* incomingOrder);
     void executeMatch(Order* incomingOrder, LimitLevel* level);

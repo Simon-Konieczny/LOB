@@ -43,6 +43,7 @@ void renderUI(const BookSnapshot& snap, VisualObserver& obs, uint64_t totalOrder
 
     std::cout << "========================================================\n";
     std::cout << "   LOB MATCHING ENGINE DEMO | Orders Processed: " << totalOrders << "\n";
+    std::cout << "   Last Traded Fill Price  : " << snap.lastTradePrice << "\n";
     std::cout << "========================================================\n";
 
     std::cout << std::setw(15) << "PRICE" << " | " << std::setw(15) << "QUANTITY" << "\n";

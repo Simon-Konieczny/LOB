@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <map>
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 
@@ -38,7 +38,7 @@ struct Order {
     ~Order() = default;
 };
 
-struct LimitLevel {
+struct alignas(64) LimitLevel {
     int64_t price;
     uint32_t totalVolume = 0;
 
@@ -73,6 +73,68 @@ struct LimitLevel {
           tail(tail) {}
 
     ~LimitLevel() = default;
+};
+
+class LimitPool
+{
+public:
+    explicit LimitPool(size_t initial_capacity) : chunkSize(initial_capacity)
+    {
+        grow();
+    }
+
+    LimitPool(const LimitPool&) = delete;
+    LimitPool& operator=(const LimitPool&) = delete;
+
+    LimitLevel* acquireLevel(int64_t price)
+    {
+        if (freeList.empty())
+        {
+            grow();
+        }
+
+        LimitLevel* level = freeList.back();
+        freeList.pop_back();
+
+        level->price = price;
+        level->totalVolume = 0;
+        level->head = nullptr;
+        level->tail = nullptr;
+
+        return level;
+    }
+
+    void releaseLevel(LimitLevel* level)
+    {
+        freeList.push_back(level);
+    }
+
+private:
+    void grow()
+    {
+        std::vector<LimitLevel> newChunk;
+        newChunk.reserve(chunkSize);
+        for (size_t i = 0; i < chunkSize; ++i)
+        {
+            newChunk.emplace_back(0, 0, nullptr, nullptr);
+        }
+
+        chunks.push_back(std::move(newChunk));
+
+        auto& allocatedChunk = chunks.back();
+
+        for (size_t i = 0; i < chunkSize; ++i)
+        {
+            freeList.push_back(&allocatedChunk[i]);
+        }
+
+        // exponential backoff
+        chunkSize *= 2;
+    }
+
+    size_t chunkSize;
+    std::vector<std::vector<LimitLevel>> chunks;
+    std::vector<LimitLevel*> freeList;
 };
 
 class OrderPool {
@@ -119,7 +181,6 @@ private:
             freeList.push_back(&allocatedChunk[i]);
         }
 
-        // geometric growth
         chunkSize *= 2;
     }
 
@@ -131,7 +192,7 @@ private:
 class OrderBook
 {
 public:
-    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), lastTradePrice(0) {}
+    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), limitPool(1000), lastTradePrice(0) {}
 
     void addOrder(uint64_t id, int64_t price, uint32_t quantity, Side side);
 
@@ -141,12 +202,12 @@ public:
 
     int64_t getBestBid() const {
         if (bids.empty()) return 0;
-        return bids.begin()->first; // Highest Bid
+        return bids.front()->price; // O(1) Highest Bid
     }
 
     int64_t getBestAsk() const {
         if (asks.empty()) return 0;
-        return asks.begin()->first; // Lowest Ask
+        return asks.front()->price; // O(1) Lowest Ask
     }
 
     BookSnapshot getSnapshot(int depth);
@@ -156,8 +217,9 @@ public:
 private:
     ITradeObserver* observer;
     OrderPool pool;
-    std::map<int64_t, LimitLevel*, std::greater<>> bids;
-    std::map<int64_t, LimitLevel*, std::less<>> asks;
+    LimitPool limitPool;
+    std::vector<LimitLevel*> bids;
+    std::vector<LimitLevel*> asks;
 
     std::unordered_map<uint64_t, Order*> orderMap;
 

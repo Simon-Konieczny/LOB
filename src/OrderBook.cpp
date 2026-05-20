@@ -6,17 +6,28 @@ void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, Side sid
 
     match(newOrder);
 
-    if (newOrder->quantity > 0) {
+    if (newOrder->quantity > 0)
+    {
         if (side == Side::Buy) {
-            if (!bids.contains(price)) {
-                bids[price] = new LimitLevel(price, 0, nullptr, nullptr);
+            // Binary search for descending order O(log N)
+            auto it = std::lower_bound(bids.begin(), bids.end(), price,
+                [](const LimitLevel* level, int64_t p) {return level->price > p;});
+
+            if (it == bids.end() || (*it)->price != price) {
+                LimitLevel* newLevel = limitPool.acquireLevel(price);
+                it = bids.insert(it, newLevel);
             }
-            bids[price]->appendOrder(newOrder);
+            (*it)->appendOrder(newOrder);
         } else {
-            if (!asks.contains(price)) {
-                asks[price] = new LimitLevel(price, 0, nullptr, nullptr);
+            // Binary search for ascending order
+            auto it = std::lower_bound(asks.begin(), asks.end(), price,
+                [](const LimitLevel* level, int64_t p) {return level->price < p;});
+
+            if (it == asks.end() || (*it)->price != price) {
+                LimitLevel* newLevel = limitPool.acquireLevel(price);
+                it = asks.insert(it, newLevel);
             }
-            asks[price]->appendOrder(newOrder);
+            (*it)->appendOrder(newOrder);
         }
     } else {
         orderMap.erase(id);
@@ -27,24 +38,26 @@ void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, Side sid
 void OrderBook::match(Order* taker) {
     if (taker->side == Side::Buy) {
         while (taker->quantity > 0 && !asks.empty()) {
-            const auto it = asks.begin();
-            if (taker->price < it->first) break;
+            LimitLevel* level = asks.front();
+            if (taker->price < level->price) break;
 
-            executeMatch(taker, it->second);
-            if (it->second->head == nullptr) {
-                delete it->second;
-                asks.erase(it);
+            executeMatch(taker, level);
+
+            if (level->head == nullptr) {
+                asks.erase(asks.begin());
+                limitPool.releaseLevel(level);
             }
         }
     } else {
         while (taker->quantity > 0 && !bids.empty()) {
-            auto it = bids.begin();
-            if (taker->price > it->first) break;
+            LimitLevel* level = bids.front();
+            if (taker->price > level->price) break;
 
-            executeMatch(taker, it->second);
-            if (it->second->head == nullptr) {
-                delete it->second;
-                bids.erase(it);
+            executeMatch(taker, level);
+
+            if (level->head == nullptr) {
+                bids.erase(bids.begin());
+                limitPool.releaseLevel(level);
             }
         }
     }
@@ -75,29 +88,36 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
 }
 
 void OrderBook::cancelOrder(uint64_t id) {
-    const auto it = orderMap.find(id);
-    if (it == orderMap.end()) return;
+    const auto orderIt = orderMap.find(id);
+    if (orderIt == orderMap.end()) return; // order not found
 
-    Order* order = it->second;
+    Order* order = orderIt->second;
     if (order->side == Side::Buy)
     {
-        LimitLevel* level = bids[order->price];
-        level->removeOrder(order);
-
-        if (!level->head)
+        auto it = std::lower_bound(bids.begin(), bids.end(), order->price,
+            [](const LimitLevel* l, int64_t p) {return l->price > p;});
+        if (it != bids.end() && (*it)->price == order->price)
         {
-            bids.erase(order->price);
-            delete level;
+            LimitLevel* level = *it;
+            level->removeOrder(order);
+            if (level->head == nullptr)
+            {
+                bids.erase(it);
+                limitPool.releaseLevel(level);
+            }
         }
-    } else if (order->side == Side::Sell)
-    {
-        LimitLevel* level = asks[order->price];
-        level->removeOrder(order);
-
-        if (!level->head)
+    } else {
+        auto it = std::lower_bound(asks.begin(), asks.end(), order->price,
+            [](const LimitLevel* l, int64_t p) {return l->price <p;});
+        if (it != asks.end() && (*it)->price == order->price)
         {
-            asks.erase(order->price);
-            delete level;
+            LimitLevel* level = *it;
+            level->removeOrder(order);
+            if (level->head == nullptr)
+            {
+                asks.erase(it);
+                limitPool.releaseLevel(level);
+            }
         }
     }
 
@@ -117,15 +137,15 @@ BookSnapshot OrderBook::getSnapshot(int depth) {
     snapshot.lastTradePrice = lastTradePrice;
 
     int count = 0;
-    for (auto const& [price, level] : bids) {
+    for (LimitLevel* level : bids) {
         if (count++ >= depth) break;
-        snapshot.bids.push_back({price, level->totalVolume});
+        snapshot.bids.push_back({level->price, level->totalVolume});
     }
 
     count = 0;
-    for (auto const& [price, level] : asks) {
+    for (LimitLevel* level : asks) {
         if (count++ >= depth) break;
-        snapshot.asks.push_back({price, level->totalVolume});
+        snapshot.asks.push_back({level->price, level->totalVolume});
     }
 
     return snapshot;

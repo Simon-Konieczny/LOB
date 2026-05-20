@@ -1,0 +1,29 @@
+name: Limit Order Book CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (Apple Silicon)
+    # macos-14 provides M1 (ARM64) runners, matching local M4 Pro architecture
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Tools
+        run: brew install ninja
+
+      - name: Configure CMake
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Engine and Tests
+        run: cmake --build build -j 3
+
+      - name: Execute Test Suite
+        run: ctest --test-dir build --output-on-failure

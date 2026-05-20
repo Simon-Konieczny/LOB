@@ -6,10 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-O3 -march=native)
 if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    link_directories("/opt/homebrew/lib")
-#    add_link_options("-L/opt/homebrew/lib" "-lstdc++")
-#    add_link_options("-static-libstdc++" "-static-libgcc")
-#    link_libraries(stdc++)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/opt/homebrew/lib")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/opt/homebrew/lib")
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 endif()
 
 include(FetchContent)
@@ -20,6 +19,28 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(googletest)
+
+FetchContent_Declare(
+        rapidcheck
+        GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
+        GIT_TAG master
+)
+FetchContent_MakeAvailable(rapidcheck)
+
+FetchContent_Declare(
+        googlebenchmark
+        URL https://github.com/google/benchmark/archive/refs/tags/v1.8.3.zip
+)
+
+set(HAVE_LIB_RT OFF CACHE INTERNAL "Force disable librt for macOS GCC")
+
+set(BENCHMARK_ENABLE_INSTALL OFF CACHE INTERNAL "Disable benchmark install")
+set(BENCHMARK_ENABLE_TESTING OFF CACHE INTERNAL "Disable benchmark tests")
+
+set(HAVE_STD_REGEX ON CACHE BOOL "Force std::regex" FORCE)
+set(HAVE_GNU_POSIX_REGEX OFF CACHE BOOL "Disable GNU regex" FORCE)
+set(HAVE_POSIX_REGEX OFF CACHE BOOL "Disable POSIX regex" FORCE)
+FetchContent_MakeAvailable(googlebenchmark)
 
 enable_testing()
 add_subdirectory(src)

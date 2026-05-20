@@ -46,4 +46,4 @@ p99  : 1000.0 ns
 p99.9: 1000.0 ns
 ========================================================
 ```
-`std::chrono::high_resolution_clock` on macOS forms a bottleneck depending on kernel state cause invalid `p50` metric. Using memory fencing ensures that the average latency is not inflated by out-of-order instruction execution, which is common on Apple Silicon.
+`std::chrono::high_resolution_clock` on macOS forms a bottleneck depending on kernel state cause invalid `p50` metric (addOrder performed in under `~41ns` clock cycle). `1000ns` p90 caused by kernel interuptions on macOS.

@@ -21,9 +21,22 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 FetchContent_Declare(
+        rapidcheck
+        GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
+        GIT_TAG master
+)
+FetchContent_MakeAvailable(rapidcheck)
+
+FetchContent_Declare(
         googlebenchmark
         URL https://github.com/google/benchmark/archive/refs/tags/v1.8.3.zip
 )
+
+set(HAVE_LIB_RT OFF CACHE INTERNAL "Force disable librt for macOS GCC")
+
+set(BENCHMARK_ENABLE_INSTALL OFF CACHE INTERNAL "Disable benchmark install")
+set(BENCHMARK_ENABLE_TESTING OFF CACHE INTERNAL "Disable benchmark tests")
+
 set(HAVE_STD_REGEX ON CACHE BOOL "Force std::regex" FORCE)
 set(HAVE_GNU_POSIX_REGEX OFF CACHE BOOL "Disable GNU regex" FORCE)
 set(HAVE_POSIX_REGEX OFF CACHE BOOL "Disable POSIX regex" FORCE)

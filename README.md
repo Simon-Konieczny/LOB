@@ -5,13 +5,13 @@ Demo set up in `src/main.cpp` captures snapshots of the book:
 ![demo_image](demo/demo.png)
 
 ## 🚀 Performance Metrics (M4 Pro)
-- Average Latency: `~22ns`
+- Average Latency: `~27.8ns`
 - p50: `0ns`
 - p99: `1us`
 - p99.9 Tail Latency: `1us`
-- Throughput: >10M orders/second
+- Throughput: >26.4M orders/second
 
-`std::chrono::high_resolution_clock` on macOS forms a bottleneck depending on kernel state cause invalid `p50` metric. Using memory fencing ensures that the average latency is not inflated by out-of-order instruction execution, which is common on Apple Silicon.
+See `benchmark_results` for more details
 
 
 ## 🛠 Key Architecture Decisions

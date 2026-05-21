@@ -209,6 +209,8 @@ public:
 
     void modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity);
 
+    void reduceOrder(uint64_t id, uint32_t newQuantity);
+
     Order* getOrder(uint64_t id);
 
     int64_t getBestBid() const {

@@ -4,6 +4,8 @@
 
 #ifndef LOB_ITCHPARSER_HPP
 #define LOB_ITCHPARSER_HPP
+#include <unordered_set>
+
 #include "OrderBook.hpp"
 
 #endif
@@ -24,7 +26,14 @@ public:
         const char* ptr = reader.data();
         const char* end = ptr + reader.size();
 
-        size_t messageCount = 0;
+        std::unordered_set<uint64_t> activeTargetOrders;
+
+        activeTargetOrders.reserve(10000000);
+
+        size_t messageAddCount = 0;
+        size_t messageCancelCount = 0;
+        size_t messageDeleteCount = 0;
+        size_t messageExecutedCount = 0;
 
         while (ptr < end) {
             // Read the 2-byte message length
@@ -37,31 +46,49 @@ public:
 
                 // ticker filtering
                 std::string_view ticker(msg->stock, 8);
-                if (ticker != targetTicker)
+                if (ticker == targetTicker)
                 {
-                    ptr += msgLength;
-                    continue;
+                    uint64_t orderId = swap64(msg->orderRefNum);
+                    activeTargetOrders.insert(orderId);
+
+                    Side side = (msg->side == 'B') ? Side::Buy : Side::Sell;
+                    book.addOrder(orderId, static_cast<int64_t>(swap32(msg->price)),
+                                  swap32(msg->shares), 0, side, STPBehavior::CancelBoth);
+                    messageAddCount++;
                 }
-
+            }
+            else if (msgType == 'E')
+            {
+                const auto* msg = reinterpret_cast<const ITCH5_OrderExecuted*>(ptr);
                 uint64_t orderId = swap64(msg->orderRefNum);
-                uint32_t shares = swap32(msg->shares);
-                uint32_t price = swap32(msg->price); // Note: 1234500 means $123.45
 
-                Side side = (msg->side == 'B') ? Side::Buy : Side::Sell;
-
-                book.addOrder(orderId, price, shares, 0, side, STPBehavior::CancelBoth);
-                messageCount++;
+                if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
+                {
+                    book.reduceOrder(orderId, swap32(msg->executedShares));
+                    messageExecutedCount++;
+                }
             }
             else if (msgType == 'X')
             {
                 const auto* msg = reinterpret_cast<const ITCH5_CancelOrder*>(ptr);
+                uint64_t orderId = swap64(msg->orderRefNum);
 
-                // ticker filtering
-                std::string_view ticker(msg->stock, 8);
-                if (ticker != targetTicker)
+                if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
                 {
-                    ptr += msgLength;
-                    continue;
+                    book.reduceOrder(orderId, swap32(msg->canceledShares));
+                    messageCancelCount++;
+                }
+            }
+            else if (msgType == 'D')
+            {
+                const auto* msg = reinterpret_cast<const ITCH5_OrderDelete*>(ptr);
+                uint64_t orderId = swap64(msg->orderRefNum);
+
+                if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
+                {
+                    book.cancelOrder(orderId);
+                    activeTargetOrders.erase(orderId);
+                    messageDeleteCount++;
                 }
             }
             // Add else if (msgType == 'E') { ... } etc.
@@ -69,6 +96,9 @@ public:
             ptr += msgLength;
         }
 
-        std::cout << "Parsed " << messageCount << " messages." << std::endl;
+        std::cout << "Parsed " << messageAddCount << " AddOrder "
+        << messageCancelCount << " CancelOrder "
+        << messageDeleteCount << " OrderDelete "
+        << messageExecutedCount << " OrderExecuted messages." << std::endl;
     }
 };

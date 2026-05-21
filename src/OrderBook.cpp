@@ -219,6 +219,25 @@ void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
     }
 }
 
+void OrderBook::reduceOrder(uint64_t id, uint32_t quantityReduction)
+{
+    // for ITCH 5.0 OrderCancel
+    const auto orderIt = orderMap.find(id);
+    if (orderIt == orderMap.end()) return;
+
+    Order* order = orderIt->second;
+
+    uint32_t newQuantity = order->quantity - quantityReduction;
+
+    if (newQuantity == 0)
+    {
+        cancelOrder(id);
+        return;
+    }
+
+    modifyOrder(id, order->price, newQuantity);
+}
+
 Order* OrderBook::getOrder(uint64_t id)
 {
     const auto it = orderMap.find(id);

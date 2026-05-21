@@ -5,7 +5,7 @@ Demo set up in `src/main.cpp` captures snapshots of the book:
 ![demo_image](demo/demo.png)
 
 ## 🚀 Performance Metrics (M4 Pro)
-- Average Latency: `~27.8ns`
+- Average Latency: `~36.8ns`
 - p50: `0ns`
 - p99: `1us`
 - p99.9 Tail Latency: `1us`

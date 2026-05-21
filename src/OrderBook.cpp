@@ -170,6 +170,55 @@ void OrderBook::cancelOrder(uint64_t id) {
     pool.release(order);
 }
 
+void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
+{
+    const auto orderIt = orderMap.find(id);
+    if (orderIt == orderMap.end()) return;
+
+    Order* order = orderIt->second;
+
+    if (order->price == newPrice && order->quantity == newQuantity) return;
+
+    if (order->price != newPrice || order->quantity < newQuantity)
+    {
+        // price change: lose time prio
+        uint32_t cachedTraderId = order->traderId;
+        Side cachedSide = order->side;
+        STPBehavior cachedStp = order->stpPolicy;
+
+        cancelOrder(id);
+
+        addOrder(id, newPrice, newQuantity, cachedTraderId, cachedSide, cachedStp);
+
+    }
+    else
+    {
+        // quantity decrease only
+        uint32_t delta = order->quantity - newQuantity;
+        order->quantity = newQuantity;
+
+        if (order->side == Side::Buy)
+        {
+            auto it = std::lower_bound(bids.begin(), bids.end(), order->price,
+                [](const LimitLevel* l, int64_t p) {return l->price > p;});
+
+            if (it != bids.end() && (*it)->price == order->price)
+            {
+                (*it)->totalVolume -= delta;
+            }
+        } else
+        {
+            auto it = std::lower_bound(asks.begin(), asks.end(), order->price,
+                [](const LimitLevel* l, int64_t p) {return l->price < p;});
+
+            if (it != asks.end() && (*it)->price == order->price)
+            {
+                (*it)->totalVolume -= delta;
+            }
+        }
+    }
+}
+
 Order* OrderBook::getOrder(uint64_t id)
 {
     const auto it = orderMap.find(id);

@@ -1,7 +1,7 @@
 #include "OrderBook.hpp"
 
-void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, Side side) {
-    auto* newOrder = pool.acquire(id, price, quantity, side);
+void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy) {
+    auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
     orderMap[id] = newOrder;
 
     match(newOrder);
@@ -64,8 +64,51 @@ void OrderBook::match(Order* taker) {
 }
 
 void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
-    while (taker->quantity > 0 && level->head) {
-        Order* maker = level->head;
+    Order* maker = level->head;
+    while (taker->quantity > 0 && maker != nullptr) {
+        Order* nextMaker = maker->next;
+
+        // Self-Trade Prevention
+        if (taker->traderId == maker->traderId)
+        {
+            uint32_t overlapQty = std::min(taker->quantity, maker->quantity);
+
+            if (taker->stpPolicy == STPBehavior::CancelNewest)
+            {
+                // incoming order rejected
+                taker->quantity = 0;
+                break;
+            }
+            else if (taker->stpPolicy == STPBehavior::CancelOldest)
+            {
+                // resting order ripped from book
+                level->totalVolume -= maker->quantity;
+                level->removeOrder(maker);
+                orderMap.erase(maker->id);
+                pool.release(maker);
+
+                maker = nextMaker;
+                continue;
+            }
+            else if (taker->stpPolicy == STPBehavior::CancelBoth)
+            {
+                // both orders reduced by overlapping amount
+                taker->quantity -= overlapQty;
+                maker->quantity -= overlapQty;
+                level->totalVolume -= overlapQty;
+
+                if (maker->quantity == 0)
+                {
+                    level->removeOrder(maker);
+                    orderMap.erase(maker->id);
+                    pool.release(maker);
+                }
+
+                maker = nextMaker;
+                if (taker->quantity == 0) break;
+                continue;
+            }
+        }
         uint32_t fillQty = std::min(taker->quantity, maker->quantity);
 
         lastTradePrice = maker->price;
@@ -84,6 +127,8 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
             orderMap.erase(maker->id);
             pool.release(maker);
         }
+
+        maker = nextMaker;
     }
 }
 

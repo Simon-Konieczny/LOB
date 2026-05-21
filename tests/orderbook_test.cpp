@@ -34,13 +34,13 @@ protected:
 
 TEST_F(OrderBookTest, PriceTimePriorityAndAggressiveSweep) {
     // 1. Setup multiple price levels with multiple orders at the best price
-    book.addOrder(1, 100, 10, Side::Sell);
-    book.addOrder(2, 100, 15, Side::Sell);
-    book.addOrder(3, 101, 20, Side::Sell);
-    book.addOrder(4, 102, 50, Side::Sell);
+    book.addOrder(1, 100, 10, 1, Side::Sell, STPBehavior::CancelBoth);
+    book.addOrder(2, 100, 15, 2, Side::Sell, STPBehavior::CancelBoth);
+    book.addOrder(3, 101, 20, 3, Side::Sell, STPBehavior::CancelBoth);
+    book.addOrder(4, 102, 50, 4, Side::Sell, STPBehavior::CancelBoth);
 
     // 2. Send aggressive buy to sweep levels 100 and 101, and partially fill 102
-    book.addOrder(5, 105, 55, Side::Buy);
+    book.addOrder(5, 105, 55, 6, Side::Buy, STPBehavior::CancelBoth);
 
     ASSERT_EQ(obs.trades.size(), 4);
 
@@ -62,11 +62,11 @@ TEST_F(OrderBookTest, PriceTimePriorityAndAggressiveSweep) {
 }
 
 TEST_F(OrderBookTest, CancelThenMatchIdempotency) {
-    book.addOrder(1, 100, 10, Side::Sell);
+    book.addOrder(1, 100, 10, 1, Side::Sell, STPBehavior::CancelBoth);
     book.cancelOrder(1);
 
     // Attempting to cross the now-canceled order
-    book.addOrder(2, 100, 10, Side::Buy);
+    book.addOrder(2, 100, 10, 3, Side::Buy, STPBehavior::CancelBoth);
 
     // Should not trade, buy order should rest on the book
     EXPECT_EQ(obs.trades.size(), 0);
@@ -82,16 +82,46 @@ TEST_F(OrderBookTest, LimitPoolExhaustionRecovery) {
     // LimitPool is initialized with 1000 capacity.
     // Insert 2000 orders at completely unique price levels to force pool growth.
     for (int i = 1; i <= 2000; ++i) {
-        book.addOrder(i, 10000 + i, 10, Side::Sell);
+        book.addOrder(i, 10000 + i, 10, 1, Side::Sell, STPBehavior::CancelBoth);
     }
 
     EXPECT_EQ(book.getBestAsk(), 10001); // Lowest ask
 
     // Sweep the first 1500 levels to ensure the linked lists and limits are intact
-    book.addOrder(9999, 20000, 15000, Side::Buy);
+    book.addOrder(9999, 20000, 15000, 2, Side::Buy, STPBehavior::CancelBoth);
 
     EXPECT_EQ(obs.trades.size(), 1500);
     EXPECT_EQ(book.getBestAsk(), 11501);
+}
+
+TEST_F(OrderBookTest, StpMidQueueExecution) {
+    // 1. Build a queue at Price Level 100
+    book.addOrder(1, 100, 10, 101, Side::Buy, STPBehavior::CancelOldest); // Firm A
+    book.addOrder(2, 100, 10, 102, Side::Buy, STPBehavior::CancelOldest); // Firm B (Target)
+    book.addOrder(3, 100, 10, 103, Side::Buy, STPBehavior::CancelOldest); // Firm C
+
+    // 2. Firm B sends an aggressive sweeping order
+    book.addOrder(4, 100, 30, 102, Side::Sell, STPBehavior::CancelOldest);
+
+    // 3. Verify the execution sequence
+    ASSERT_EQ(obs.trades.size(), 2);
+
+    // First trade should be Firm B hitting Firm A
+    EXPECT_EQ(obs.trades[0].makerId, 1);
+    EXPECT_EQ(obs.trades[0].takerId, 4);
+    EXPECT_EQ(obs.trades[0].qty, 10);
+
+    // Second trade should be Firm B hitting Firm C (Order 2 was canceled via STP)
+    EXPECT_EQ(obs.trades[1].makerId, 3);
+    EXPECT_EQ(obs.trades[1].takerId, 4);
+    EXPECT_EQ(obs.trades[1].qty, 10);
+
+    // 4. Verify book state (Order 4 should be resting with 10 lots remaining)
+    EXPECT_EQ(book.getBestAsk(), 100);
+    EXPECT_EQ(book.getOrder(4)->quantity, 10);
+
+    // The bid side should be completely empty
+    EXPECT_EQ(book.getBestBid(), 0);
 }
 
 // ==========================================
@@ -103,6 +133,7 @@ struct OrderAction {
     uint64_t id;
     int64_t price;
     uint32_t qty;
+    uint32_t traderId;
     Side side;
 };
 
@@ -116,6 +147,7 @@ namespace rc {
                 gen::set(&OrderAction::id, gen::inRange<uint64_t>(1, 1000)),
                 gen::set(&OrderAction::price, gen::inRange<int64_t>(50, 150)),
                 gen::set(&OrderAction::qty, gen::inRange<uint32_t>(1, 100)),
+                gen::set(&OrderAction::traderId, gen::inRange<uint32_t>(1, 10000)),
                 gen::set(&OrderAction::side, gen::element(Side::Buy, Side::Sell))
             );
         }
@@ -132,7 +164,7 @@ RC_GTEST_PROP(OrderBookProperties, NoOrderMatchesItself, (const std::vector<Orde
         } else {
             // Only add if it doesn't already exist to avoid duplicate ID edge cases
             if (testBook.getOrder(action.id) == nullptr) {
-                testBook.addOrder(action.id, action.price, action.qty, action.side);
+                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::CancelBoth);
             }
         }
     }
@@ -152,7 +184,7 @@ RC_GTEST_PROP(OrderBookProperties, BookNeverCrosses, (const std::vector<OrderAct
             testBook.cancelOrder(action.id);
         } else {
             if (testBook.getOrder(action.id) == nullptr) {
-                testBook.addOrder(action.id, action.price, action.qty, action.side);
+                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::CancelBoth);
             }
         }
 

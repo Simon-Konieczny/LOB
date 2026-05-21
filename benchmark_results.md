@@ -19,7 +19,7 @@ Load Average: 2.51, 2.53, 2.64
 ----------------------------------------------------------------------------------------------
 Benchmark                                    Time             CPU   Iterations UserCounters...
 ----------------------------------------------------------------------------------------------
-BM_OrderBookAdd/iterations:10000000       37.8 ns         37.8 ns     10000000 items_per_second=26.4768M/s
+BM_OrderBookAdd/iterations:10000000       36.8 ns         36.8 ns     10000000 items_per_second=27.1646M/s
 ```
 ## Latency Distribution
 ```text

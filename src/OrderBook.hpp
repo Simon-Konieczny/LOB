@@ -23,17 +23,25 @@ struct BookSnapshot {
     int64_t lastTradePrice = 0;
 };
 
+enum class STPBehavior : uint8_t {
+    CancelNewest, // Cancel the incoming order
+    CancelOldest, // Cancel the resting order
+    CancelBoth    // Cancel resting, reduce incoming by resting size
+};
+
 struct Order {
     uint64_t id;
     int64_t price;
     uint32_t quantity;
+    uint32_t traderId;
     Side side;
+    STPBehavior stpPolicy;
 
     Order* prev = nullptr;
     Order* next = nullptr;
 
-    Order(uint64_t id, int64_t price, uint32_t quantity, Side side)
-        : id(id), price(price), quantity(quantity), side(side) {}
+    Order(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy)
+        : id(id), price(price), quantity(quantity), traderId(traderId), side(side), stpPolicy(stpPolicy) {}
 
     ~Order() = default;
 };
@@ -146,7 +154,7 @@ public:
     OrderPool(const OrderPool&) = delete;
     OrderPool& operator=(const OrderPool&) = delete;
 
-    Order* acquire(uint64_t id, int64_t price, uint32_t qty, Side side) {
+    Order* acquire(uint64_t id, int64_t price, uint32_t qty, uint32_t traderId, Side side, STPBehavior stpPolicy) {
         if (freeList.empty()) {
             grow(); // Automatically and safely expand memory
         }
@@ -157,7 +165,9 @@ public:
         o->id = id;
         o->price = price;
         o->quantity = qty;
+        o->traderId = traderId;
         o->side = side;
+        o->stpPolicy = stpPolicy;
         o->next = o->prev = nullptr;
         return o;
     }
@@ -171,7 +181,7 @@ private:
         std::vector<Order> newChunk;
         newChunk.reserve(chunkSize);
         for (size_t i = 0; i < chunkSize; ++i) {
-            newChunk.emplace_back(0, 0, 0, Side::Buy);
+            newChunk.emplace_back(0, 0, 0, 0, Side::Buy, STPBehavior::CancelBoth);
         }
 
         chunks.push_back(std::move(newChunk));
@@ -194,7 +204,7 @@ class OrderBook
 public:
     explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), limitPool(1000), lastTradePrice(0) {}
 
-    void addOrder(uint64_t id, int64_t price, uint32_t quantity, Side side);
+    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy);
 
     void cancelOrder(uint64_t id);
 

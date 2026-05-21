@@ -127,7 +127,7 @@ public:
                 if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
                 {
                     NormalizedMsg normMsg;
-                    normMsg.action = MsgAction::Reduce; // Maps to the same engine logic as 'E'
+                    normMsg.action = MsgAction::Reduce;
                     normMsg.orderId = orderId;
                     normMsg.quantity = swap32(msg->canceledShares);
 

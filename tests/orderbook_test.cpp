@@ -34,13 +34,13 @@ protected:
 
 TEST_F(OrderBookTest, PriceTimePriorityAndAggressiveSweep) {
     // Setup multiple price levels with multiple orders at the best price
-    book.addOrder(1, 100, 10, 1, Side::Sell, STPBehavior::CancelBoth);
-    book.addOrder(2, 100, 15, 2, Side::Sell, STPBehavior::CancelBoth);
-    book.addOrder(3, 101, 20, 3, Side::Sell, STPBehavior::CancelBoth);
-    book.addOrder(4, 102, 50, 4, Side::Sell, STPBehavior::CancelBoth);
+    book.addOrder(1, 100, 10, 1, Side::Sell, STPBehavior::None);
+    book.addOrder(2, 100, 15, 2, Side::Sell, STPBehavior::None);
+    book.addOrder(3, 101, 20, 3, Side::Sell, STPBehavior::None);
+    book.addOrder(4, 102, 50, 4, Side::Sell, STPBehavior::None);
 
     // Send aggressive buy to sweep levels 100 and 101, and partially fill 102
-    book.addOrder(5, 105, 55, 6, Side::Buy, STPBehavior::CancelBoth);
+    book.addOrder(5, 105, 55, 6, Side::Buy, STPBehavior::None);
 
     ASSERT_EQ(obs.trades.size(), 4);
 
@@ -62,11 +62,11 @@ TEST_F(OrderBookTest, PriceTimePriorityAndAggressiveSweep) {
 }
 
 TEST_F(OrderBookTest, CancelThenMatchIdempotency) {
-    book.addOrder(1, 100, 10, 1, Side::Sell, STPBehavior::CancelBoth);
+    book.addOrder(1, 100, 10, 1, Side::Sell, STPBehavior::None);
     book.cancelOrder(1);
 
     // Attempting to cross the now-canceled order
-    book.addOrder(2, 100, 10, 3, Side::Buy, STPBehavior::CancelBoth);
+    book.addOrder(2, 100, 10, 3, Side::Buy, STPBehavior::None);
 
     // Should not trade, buy order should rest on the book
     EXPECT_EQ(obs.trades.size(), 0);
@@ -82,13 +82,13 @@ TEST_F(OrderBookTest, LimitPoolExhaustionRecovery) {
     // LimitPool is initialized with 1000 capacity.
     // Insert 2000 orders at completely unique price levels to force pool growth.
     for (int i = 1; i <= 2000; ++i) {
-        book.addOrder(i, 10000 + i, 10, 1, Side::Sell, STPBehavior::CancelBoth);
+        book.addOrder(i, 10000 + i, 10, 1, Side::Sell, STPBehavior::None);
     }
 
     EXPECT_EQ(book.getBestAsk(), 10001); // Lowest ask
 
     // Sweep the first 1500 levels to ensure the linked lists and limits are intact
-    book.addOrder(9999, 20000, 15000, 2, Side::Buy, STPBehavior::CancelBoth);
+    book.addOrder(9999, 20000, 15000, 2, Side::Buy, STPBehavior::None);
 
     EXPECT_EQ(obs.trades.size(), 1500);
     EXPECT_EQ(book.getBestAsk(), 11501);
@@ -274,7 +274,7 @@ RC_GTEST_PROP(OrderBookProperties, NoOrderMatchesItself, (const std::vector<Orde
         } else {
             // Only add if it doesn't already exist to avoid duplicate ID edge cases
             if (testBook.getOrder(action.id) == nullptr) {
-                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::CancelBoth);
+                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::None);
             }
         }
     }
@@ -294,7 +294,7 @@ RC_GTEST_PROP(OrderBookProperties, BookNeverCrosses, (const std::vector<OrderAct
             testBook.cancelOrder(action.id);
         } else {
             if (testBook.getOrder(action.id) == nullptr) {
-                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::CancelBoth);
+                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::None);
             }
         }
 

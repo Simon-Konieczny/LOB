@@ -41,6 +41,7 @@
 *.dwo
 .DS_Store
 
+data
 .cache
 .idea
 _deps

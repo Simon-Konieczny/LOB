@@ -1,6 +1,8 @@
 //
 // Created by Simon Konieczny on 19/02/2026.
 //
+#include "ITCHParser.hpp"
+#include "NormalizedMsg.hpp"
 #ifdef __APPLE__
 #include <stddef.h>
 typedef size_t rsize_t;
@@ -88,39 +90,47 @@ void engineThread(SPSCQueue<MarketEvent, 1024>& queue, OrderBook& book) {
     }
 }
 
+struct DirectConsumer
+{
+    OrderBook& book;
+    inline void onMessage(const NormalizedMsg& msg)
+    {
+        switch (msg.action)
+        {
+        case MsgAction::Add:
+            book.addOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, STPBehavior::None, true);
+            break;
+        case MsgAction::Reduce:
+            book.reduceOrder(msg.orderId, msg.quantity);
+            break;
+        case MsgAction::Cancel:
+            book.cancelOrder(msg.orderId);
+            break;
+        case MsgAction::Replace:
+            book.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity, true);
+            break;
+        }
+    }
+};
+
 int main() {
     VisualObserver obs;
     OrderBook engine(&obs);
-    std::mt19937 rng(std::random_device{}());
-    uint64_t orderIdCounter = 1;
 
-    for(int i = 0; i < 10; ++i) {
-        engine.addOrder(orderIdCounter++, 1000 + (i*2), 10 + i, orderIdCounter, Side::Sell,STPBehavior::CancelBoth);
-        engine.addOrder(orderIdCounter++, 990 - (i*2), 10 + i, orderIdCounter, Side::Buy, STPBehavior::CancelBoth);
-    }
+    DirectConsumer directConsumer{engine};
 
-    while (true) {
-        std::uniform_int_distribution<int> dist(0, 10);
-        int action = dist(rng);
+    ITCHParser<DirectConsumer> parser(directConsumer);
 
-        if (action < 8) {
-            int64_t priceShift = std::uniform_int_distribution<int>(-5, 5)(rng);
-            Side s = (dist(rng) > 5) ? Side::Buy : Side::Sell;
-            int64_t basePrice = (s == Side::Buy) ? 990 : 1000;
-            engine.addOrder(orderIdCounter++, basePrice + priceShift, 5, orderIdCounter, s, STPBehavior::CancelBoth);
-        }
-        else {
-            if (dist(rng) > 5)
-                engine.addOrder(orderIdCounter++, 1010, 15, orderIdCounter, Side::Buy, STPBehavior::CancelBoth);
-            else
-                engine.addOrder(orderIdCounter++, 980, 15, orderIdCounter, Side::Sell, STPBehavior::CancelBoth);
-        }
+    std::string dataFile = "./data/12302019.NASDAQ_ITCH50";
 
-        auto snap = engine.getSnapshot(5);
-        renderUI(snap, obs, orderIdCounter);
+    std::string targetTicker = "AAPL    ";
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+    std::cout << "Starting ITCH 5.0 Ingress for " << targetTicker << "...\n";
+
+    parser.parse(dataFile, targetTicker);
+
+    auto snap = engine.getSnapshot(10);
+    renderUI(snap, obs, 0);
 
     return 0;
 }

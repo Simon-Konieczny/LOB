@@ -1,10 +1,13 @@
 #include "OrderBook.hpp"
 
-void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy) {
+void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy, bool isMarketData) {
     auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
     orderMap[id] = newOrder;
 
-    match(newOrder);
+    if (!isMarketData)
+    {
+        match(newOrder);
+    }
 
     if (newOrder->quantity > 0)
     {
@@ -69,7 +72,7 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
         Order* nextMaker = maker->next;
 
         // Self-Trade Prevention
-        if (taker->traderId == maker->traderId)
+        if (taker->traderId == maker->traderId && taker->stpPolicy != STPBehavior::None)
         {
             uint32_t overlapQty = std::min(taker->quantity, maker->quantity);
 
@@ -217,6 +220,37 @@ void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
             }
         }
     }
+}
+
+void OrderBook::reduceOrder(uint64_t id, uint32_t quantityReduction)
+{
+    // for ITCH 5.0 OrderCancel
+    const auto orderIt = orderMap.find(id);
+    if (orderIt == orderMap.end()) return;
+
+    Order* order = orderIt->second;
+
+    uint32_t newQuantity = order->quantity - quantityReduction;
+
+    if (newQuantity == 0)
+    {
+        cancelOrder(id);
+        return;
+    }
+
+    modifyOrder(id, order->price, newQuantity);
+}
+
+void OrderBook::replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, bool isMarketData)
+{
+    Order* oldOrder = getOrder(oldId);
+    if (!oldOrder) return;
+
+    Side side = oldOrder->side;
+
+    cancelOrder(oldId);
+
+    addOrder(newId, newPrice, newQuantity, 0, side, STPBehavior::None, isMarketData);
 }
 
 Order* OrderBook::getOrder(uint64_t id)

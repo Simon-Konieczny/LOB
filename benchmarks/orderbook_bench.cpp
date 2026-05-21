@@ -26,10 +26,11 @@ static void BM_OrderBookAdd(benchmark::State& state)
     // Warm up the cache and memory pool
     for (int i = 0; i < 1000; ++i)
     {
-        book.addOrder(i, 100, 1, Side::Sell);
+        book.addOrder(i, 100, 1, 1, Side::Sell, STPBehavior::CancelBoth);
     }
 
     uint64_t orderId = 200000;
+    uint32_t traderId = 100;
 
     // pre-allocate to prevent OS-level latency spikes during measurement
     g_latencies.clear();
@@ -42,7 +43,7 @@ static void BM_OrderBookAdd(benchmark::State& state)
         // prevent compiler from optimizing orderId + memory ops
         benchmark::DoNotOptimize(orderId);
 
-        book.addOrder(orderId++, 100, 1, Side::Buy);
+        book.addOrder(orderId++, 100, 1, traderId++, Side::Buy, STPBehavior::CancelBoth);
 
         benchmark::ClobberMemory();
 

@@ -1,7 +1,7 @@
 #include "OrderBook.hpp"
 
-void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, Side side) {
-    auto* newOrder = pool.acquire(id, price, quantity, side);
+void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy) {
+    auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
     orderMap[id] = newOrder;
 
     match(newOrder);
@@ -64,8 +64,51 @@ void OrderBook::match(Order* taker) {
 }
 
 void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
-    while (taker->quantity > 0 && level->head) {
-        Order* maker = level->head;
+    Order* maker = level->head;
+    while (taker->quantity > 0 && maker != nullptr) {
+        Order* nextMaker = maker->next;
+
+        // Self-Trade Prevention
+        if (taker->traderId == maker->traderId)
+        {
+            uint32_t overlapQty = std::min(taker->quantity, maker->quantity);
+
+            if (taker->stpPolicy == STPBehavior::CancelNewest)
+            {
+                // incoming order rejected
+                taker->quantity = 0;
+                break;
+            }
+            else if (taker->stpPolicy == STPBehavior::CancelOldest)
+            {
+                // resting order ripped from book
+                level->totalVolume -= maker->quantity;
+                level->removeOrder(maker);
+                orderMap.erase(maker->id);
+                pool.release(maker);
+
+                maker = nextMaker;
+                continue;
+            }
+            else if (taker->stpPolicy == STPBehavior::CancelBoth)
+            {
+                // both orders reduced by overlapping amount
+                taker->quantity -= overlapQty;
+                maker->quantity -= overlapQty;
+                level->totalVolume -= overlapQty;
+
+                if (maker->quantity == 0)
+                {
+                    level->removeOrder(maker);
+                    orderMap.erase(maker->id);
+                    pool.release(maker);
+                }
+
+                maker = nextMaker;
+                if (taker->quantity == 0) break;
+                continue;
+            }
+        }
         uint32_t fillQty = std::min(taker->quantity, maker->quantity);
 
         lastTradePrice = maker->price;
@@ -84,6 +127,8 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
             orderMap.erase(maker->id);
             pool.release(maker);
         }
+
+        maker = nextMaker;
     }
 }
 
@@ -123,6 +168,55 @@ void OrderBook::cancelOrder(uint64_t id) {
 
     orderMap.erase(id);
     pool.release(order);
+}
+
+void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
+{
+    const auto orderIt = orderMap.find(id);
+    if (orderIt == orderMap.end()) return;
+
+    Order* order = orderIt->second;
+
+    if (order->price == newPrice && order->quantity == newQuantity) return;
+
+    if (order->price != newPrice || order->quantity < newQuantity)
+    {
+        // price change: lose time prio
+        uint32_t cachedTraderId = order->traderId;
+        Side cachedSide = order->side;
+        STPBehavior cachedStp = order->stpPolicy;
+
+        cancelOrder(id);
+
+        addOrder(id, newPrice, newQuantity, cachedTraderId, cachedSide, cachedStp);
+
+    }
+    else
+    {
+        // quantity decrease only
+        uint32_t delta = order->quantity - newQuantity;
+        order->quantity = newQuantity;
+
+        if (order->side == Side::Buy)
+        {
+            auto it = std::lower_bound(bids.begin(), bids.end(), order->price,
+                [](const LimitLevel* l, int64_t p) {return l->price > p;});
+
+            if (it != bids.end() && (*it)->price == order->price)
+            {
+                (*it)->totalVolume -= delta;
+            }
+        } else
+        {
+            auto it = std::lower_bound(asks.begin(), asks.end(), order->price,
+                [](const LimitLevel* l, int64_t p) {return l->price < p;});
+
+            if (it != asks.end() && (*it)->price == order->price)
+            {
+                (*it)->totalVolume -= delta;
+            }
+        }
+    }
 }
 
 Order* OrderBook::getOrder(uint64_t id)

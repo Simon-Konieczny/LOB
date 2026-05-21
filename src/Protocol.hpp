@@ -18,7 +18,9 @@ struct NewOrderMsg {
     uint64_t orderId;
     int64_t price;
     uint32_t qty;
+    uint32_t traderId;
     Side side;
+    STPBehavior stpPolicy;
 };
 
 struct CancelOrderMsg {

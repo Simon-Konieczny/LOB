@@ -78,7 +78,9 @@ void engineThread(SPSCQueue<MarketEvent, 1024>& queue, OrderBook& book) {
                 book.addOrder(event.data.newOrder.orderId,
                              event.data.newOrder.price,
                              event.data.newOrder.qty,
-                             event.data.newOrder.side);
+                             event.data.newOrder.traderId,
+                             event.data.newOrder.side,
+                             event.data.newOrder.stpPolicy);
             } else if (event.type == MsgType::CancelOrder) {
                 book.cancelOrder(event.data.cancel.orderId);
             }
@@ -93,8 +95,8 @@ int main() {
     uint64_t orderIdCounter = 1;
 
     for(int i = 0; i < 10; ++i) {
-        engine.addOrder(orderIdCounter++, 1000 + (i*2), 10 + i, Side::Sell);
-        engine.addOrder(orderIdCounter++, 990 - (i*2), 10 + i, Side::Buy);
+        engine.addOrder(orderIdCounter++, 1000 + (i*2), 10 + i, orderIdCounter, Side::Sell,STPBehavior::CancelBoth);
+        engine.addOrder(orderIdCounter++, 990 - (i*2), 10 + i, orderIdCounter, Side::Buy, STPBehavior::CancelBoth);
     }
 
     while (true) {
@@ -105,13 +107,13 @@ int main() {
             int64_t priceShift = std::uniform_int_distribution<int>(-5, 5)(rng);
             Side s = (dist(rng) > 5) ? Side::Buy : Side::Sell;
             int64_t basePrice = (s == Side::Buy) ? 990 : 1000;
-            engine.addOrder(orderIdCounter++, basePrice + priceShift, 5, s);
+            engine.addOrder(orderIdCounter++, basePrice + priceShift, 5, orderIdCounter, s, STPBehavior::CancelBoth);
         }
         else {
             if (dist(rng) > 5)
-                engine.addOrder(orderIdCounter++, 1010, 15, Side::Buy);
+                engine.addOrder(orderIdCounter++, 1010, 15, orderIdCounter, Side::Buy, STPBehavior::CancelBoth);
             else
-                engine.addOrder(orderIdCounter++, 980, 15, Side::Sell);
+                engine.addOrder(orderIdCounter++, 980, 15, orderIdCounter, Side::Sell, STPBehavior::CancelBoth);
         }
 
         auto snap = engine.getSnapshot(5);

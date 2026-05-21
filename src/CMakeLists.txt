@@ -3,7 +3,8 @@ add_library(lob_core OrderBook.cpp
         SPSCQueue.hpp
         ITCH50.hpp
         MmapReader.hpp
-        ITCHParser.hpp)
+        ITCHParser.hpp
+        NormalizedMsg.hpp)
 
 # main executable
 add_executable(lob_main main.cpp)

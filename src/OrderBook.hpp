@@ -23,6 +23,7 @@ struct BookSnapshot {
 };
 
 enum class STPBehavior : uint8_t {
+    None,         // Skip STP
     CancelNewest, // Cancel the incoming order
     CancelOldest, // Cancel the resting order
     CancelBoth    // Cancel resting, reduce incoming by resting size
@@ -203,13 +204,15 @@ class OrderBook
 public:
     explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), limitPool(1000), lastTradePrice(0) {}
 
-    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy);
+    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy, bool isMarketData = false);
 
     void cancelOrder(uint64_t id);
 
     void modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity);
 
     void reduceOrder(uint64_t id, uint32_t newQuantity);
+
+    void replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, bool isMarketData = false);
 
     Order* getOrder(uint64_t id);
 

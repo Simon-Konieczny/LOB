@@ -6,6 +6,7 @@
 #define LOB_ITCHPARSER_HPP
 #include <unordered_set>
 
+#include "NormalizedMsg.hpp"
 #include "OrderBook.hpp"
 
 #endif
@@ -15,13 +16,17 @@
 #include "MmapReader.hpp"
 #include <iostream>
 
+template <typename MessageConsumer>
 class ITCHParser {
+    MessageConsumer& consumer;
 public:
+    ITCHParser(MessageConsumer& cons) : consumer(cons) {}
+
     static inline uint16_t swap16(uint16_t val) { return __builtin_bswap16(val); }
     static inline uint32_t swap32(uint32_t val) { return __builtin_bswap32(val); }
     static inline uint64_t swap64(uint64_t val) { return __builtin_bswap64(val); }
 
-    void parse(const std::string& filepath, OrderBook& book, const std::string& targetTicker) {
+    void parse(const std::string& filepath, const std::string& targetTicker) {
         MmapReader reader(filepath);
         const char* ptr = reader.data();
         const char* end = ptr + reader.size();
@@ -30,10 +35,7 @@ public:
 
         activeTargetOrders.reserve(10000000);
 
-        size_t messageAddCount = 0;
-        size_t messageCancelCount = 0;
-        size_t messageDeleteCount = 0;
-        size_t messageExecutedCount = 0;
+        size_t messageCount = 0;
 
         while (ptr < end) {
             // Read the 2-byte message length
@@ -51,10 +53,32 @@ public:
                     uint64_t orderId = swap64(msg->orderRefNum);
                     activeTargetOrders.insert(orderId);
 
-                    Side side = (msg->side == 'B') ? Side::Buy : Side::Sell;
-                    book.addOrder(orderId, static_cast<int64_t>(swap32(msg->price)),
-                                  swap32(msg->shares), 0, side, STPBehavior::CancelBoth);
-                    messageAddCount++;
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Add;
+                    normMsg.side = (msg->side == 'B') ? Side::Buy : Side::Sell;
+                    normMsg.quantity = swap32(msg->shares);
+                    normMsg.orderId = orderId;
+                    normMsg.price = static_cast<int64_t>(swap32(msg->price));
+
+                    consumer.onMessage(normMsg);
+
+                    messageCount++;
+                }
+            }
+            else if (msgType == 'C')
+            {
+                const auto* msg = reinterpret_cast<const ITCH5_OrderExecutedWithPrice*>(ptr);
+                uint64_t orderId = swap64(msg->orderRefNum);
+
+                if (activeTargetOrders.find(orderId) != activeTargetOrders.end()) {
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Reduce;
+                    normMsg.orderId = orderId;
+                    normMsg.quantity = swap32(msg->executedShares);
+
+                    consumer.onMessage(normMsg);
+
+                    messageCount++;
                 }
             }
             else if (msgType == 'E')
@@ -64,8 +88,35 @@ public:
 
                 if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
                 {
-                    book.reduceOrder(orderId, swap32(msg->executedShares));
-                    messageExecutedCount++;
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Reduce;
+                    normMsg.orderId = orderId;
+                    normMsg.quantity = swap32(msg->executedShares);
+
+                    consumer.onMessage(normMsg);
+
+                    messageCount++;
+                }
+            }
+            else if (msgType == 'F')
+            {
+                const auto* msg = reinterpret_cast<const ITCH5_AddOrderMPID*>(ptr);
+                std::string_view ticker(msg->stock, 8);
+
+                if (ticker == targetTicker) {
+                    uint64_t orderId = swap64(msg->orderRefNum);
+                    activeTargetOrders.insert(orderId);
+
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Add;
+                    normMsg.side = (msg->side == 'B') ? Side::Buy : Side::Sell;
+                    normMsg.quantity = swap32(msg->shares);
+                    normMsg.orderId = orderId;
+                    normMsg.price = static_cast<int64_t>(swap32(msg->price));
+
+                    consumer.onMessage(normMsg);
+
+                    messageCount++;
                 }
             }
             else if (msgType == 'X')
@@ -75,8 +126,14 @@ public:
 
                 if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
                 {
-                    book.reduceOrder(orderId, swap32(msg->canceledShares));
-                    messageCancelCount++;
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Reduce; // Maps to the same engine logic as 'E'
+                    normMsg.orderId = orderId;
+                    normMsg.quantity = swap32(msg->canceledShares);
+
+                    consumer.onMessage(normMsg);
+
+                    messageCount++;
                 }
             }
             else if (msgType == 'D')
@@ -86,19 +143,44 @@ public:
 
                 if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
                 {
-                    book.cancelOrder(orderId);
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Cancel;
+                    normMsg.orderId = orderId;
+
+                    consumer.onMessage(normMsg);
                     activeTargetOrders.erase(orderId);
-                    messageDeleteCount++;
+
+                    messageCount++;
                 }
             }
-            // Add else if (msgType == 'E') { ... } etc.
+            else if (msgType == 'U')
+            {
+                const auto* msg = reinterpret_cast<const ITCH5_OrderReplace*>(ptr);
+                uint64_t origOrderId = swap64(msg->originalOrderRefNum);
+
+                if (activeTargetOrders.find(origOrderId) != activeTargetOrders.end())
+                {
+                    uint64_t newOrderId = swap64(msg->newOrderRefNum);
+
+                    NormalizedMsg normMsg;
+                    normMsg.action = MsgAction::Replace;
+                    normMsg.orderId = origOrderId;
+                    normMsg.newOrderId = newOrderId;
+                    normMsg.quantity = swap32(msg->shares);
+                    normMsg.price = static_cast<int64_t>(swap32(msg->price));
+
+                    consumer.onMessage(normMsg);
+
+                    activeTargetOrders.erase(origOrderId);
+                    activeTargetOrders.insert(newOrderId);
+
+                    messageCount++;
+                }
+            }
 
             ptr += msgLength;
         }
 
-        std::cout << "Parsed " << messageAddCount << " AddOrder "
-        << messageCancelCount << " CancelOrder "
-        << messageDeleteCount << " OrderDelete "
-        << messageExecutedCount << " OrderExecuted messages." << std::endl;
+        std::cout << "Parsed " << messageCount << " messages." << std::endl;
     }
 };

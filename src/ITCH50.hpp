@@ -11,7 +11,6 @@
 #include <cstdint>
 
 #pragma pack(push, 1)
-
 struct ITCH5_AddOrder {
     char msgType;           // 'A'
     uint16_t stockLocate;
@@ -55,4 +54,39 @@ struct ITCH5_OrderDelete {
     uint64_t orderRefNum;
 };
 
+struct ITCH5_OrderReplace {
+    char msgType;           // 'U'
+    uint16_t stockLocate;
+    uint16_t trackingNum;
+    uint8_t timestamp[6];
+    uint64_t originalOrderRefNum;
+    uint64_t newOrderRefNum;
+    uint32_t shares;
+    uint32_t price;
+};
+
+struct ITCH5_AddOrderMPID {
+    char msgType;           // 'F'
+    uint16_t stockLocate;
+    uint16_t trackingNum;
+    uint8_t timestamp[6];
+    uint64_t orderRefNum;
+    char side;
+    uint32_t shares;
+    char stock[8];
+    uint32_t price;
+    char mpid[4];           // The Market Maker ID
+};
+
+struct ITCH5_OrderExecutedWithPrice {
+    char msgType;           // 'C'
+    uint16_t stockLocate;
+    uint16_t trackingNum;
+    uint8_t timestamp[6];
+    uint64_t orderRefNum;
+    uint32_t executedShares;
+    uint64_t matchNumber;
+    char printable;
+    uint32_t executionPrice;
+};
 #pragma pack(pop)

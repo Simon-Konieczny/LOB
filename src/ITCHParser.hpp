@@ -25,6 +25,14 @@ public:
     static inline uint16_t swap16(uint16_t val) { return __builtin_bswap16(val); }
     static inline uint32_t swap32(uint32_t val) { return __builtin_bswap32(val); }
     static inline uint64_t swap64(uint64_t val) { return __builtin_bswap64(val); }
+    static inline uint64_t parse48BitTimestamp(const uint8_t* ts) {
+        return (static_cast<uint64_t>(ts[0]) << 40) |
+               (static_cast<uint64_t>(ts[1]) << 32) |
+               (static_cast<uint64_t>(ts[2]) << 24) |
+               (static_cast<uint64_t>(ts[3]) << 16) |
+               (static_cast<uint64_t>(ts[4]) << 8)  |
+               (static_cast<uint64_t>(ts[5]));
+    }
 
     void parse(const std::string& filepath, const std::string& targetTicker) {
         MmapReader reader(filepath);
@@ -59,6 +67,7 @@ public:
                     normMsg.quantity = swap32(msg->shares);
                     normMsg.orderId = orderId;
                     normMsg.price = static_cast<int64_t>(swap32(msg->price));
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
 
@@ -75,6 +84,7 @@ public:
                     normMsg.action = MsgAction::Reduce;
                     normMsg.orderId = orderId;
                     normMsg.quantity = swap32(msg->executedShares);
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
 
@@ -92,6 +102,7 @@ public:
                     normMsg.action = MsgAction::Reduce;
                     normMsg.orderId = orderId;
                     normMsg.quantity = swap32(msg->executedShares);
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
 
@@ -113,6 +124,7 @@ public:
                     normMsg.quantity = swap32(msg->shares);
                     normMsg.orderId = orderId;
                     normMsg.price = static_cast<int64_t>(swap32(msg->price));
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
 
@@ -130,6 +142,7 @@ public:
                     normMsg.action = MsgAction::Reduce;
                     normMsg.orderId = orderId;
                     normMsg.quantity = swap32(msg->canceledShares);
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
 
@@ -146,6 +159,7 @@ public:
                     NormalizedMsg normMsg;
                     normMsg.action = MsgAction::Cancel;
                     normMsg.orderId = orderId;
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
                     activeTargetOrders.erase(orderId);
@@ -168,6 +182,7 @@ public:
                     normMsg.newOrderId = newOrderId;
                     normMsg.quantity = swap32(msg->shares);
                     normMsg.price = static_cast<int64_t>(swap32(msg->price));
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
 
                     consumer.onMessage(normMsg);
 

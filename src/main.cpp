@@ -1,31 +1,24 @@
 //
 // Created by Simon Konieczny on 19/02/2026.
 //
+#include <thread>
+
 #include "ITCHParser.hpp"
 #include "NormalizedMsg.hpp"
+#include "ReplayEngine.hpp"
+#include "SPSCQueue.hpp"
 #ifdef __APPLE__
 #include <stddef.h>
 typedef size_t rsize_t;
 #endif
 
 #include <iostream>
-#include <thread>
 #include <iomanip>
 #include <deque>
 #include <random>
 #include <chrono>
 
-#include "SPSCQueue.hpp"
-#include "Protocol.hpp"
 #include "OrderBook.hpp"
-
-struct MarketEvent {
-    MsgType type;
-    union {
-        NewOrderMsg newOrder;
-        CancelOrderMsg cancel;
-    } data;
-};
 
 class VisualObserver : public ITradeObserver {
 public:
@@ -72,24 +65,6 @@ void renderUI(const BookSnapshot& snap, VisualObserver& obs, uint64_t totalOrder
     }
 }
 
-void engineThread(SPSCQueue<MarketEvent, 1024>& queue, OrderBook& book) {
-    MarketEvent event{};
-    while (true) {
-        if (queue.pop(event)) {
-            if (event.type == MsgType::NewOrder) {
-                book.addOrder(event.data.newOrder.orderId,
-                             event.data.newOrder.price,
-                             event.data.newOrder.qty,
-                             event.data.newOrder.traderId,
-                             event.data.newOrder.side,
-                             event.data.newOrder.stpPolicy);
-            } else if (event.type == MsgType::CancelOrder) {
-                book.cancelOrder(event.data.cancel.orderId);
-            }
-        }
-    }
-}
-
 struct DirectConsumer
 {
     OrderBook& book;
@@ -98,7 +73,7 @@ struct DirectConsumer
         switch (msg.action)
         {
         case MsgAction::Add:
-            book.addOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, STPBehavior::None, true);
+            book.replayOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, STPBehavior::None);
             break;
         case MsgAction::Reduce:
             book.reduceOrder(msg.orderId, msg.quantity);
@@ -107,29 +82,55 @@ struct DirectConsumer
             book.cancelOrder(msg.orderId);
             break;
         case MsgAction::Replace:
-            book.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity, true);
+            book.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity);
             break;
         }
     }
 };
 
+class QueueProducerAdapter {
+public:
+    QueueProducerAdapter(SPSCQueue<NormalizedMsg>& queue) : queue_(queue) {}
+
+    inline void onMessage(const NormalizedMsg& msg) {
+        while (!queue_.push(msg)) {
+            #if defined(__aarch64__) || defined(__arm__)
+                        __asm__ volatile("yield" ::: "memory");
+            #else
+                        __asm__ volatile("pause" ::: "memory");
+            #endif
+        }
+    }
+private:
+    SPSCQueue<NormalizedMsg>& queue_;
+};
+
 int main() {
     VisualObserver obs;
-    OrderBook engine(&obs);
+    SPSCQueue<NormalizedMsg> queue(65536);
+    std::atomic<bool> producerDone(false);
 
-    DirectConsumer directConsumer{engine};
-
-    ITCHParser<DirectConsumer> parser(directConsumer);
+    QueueProducerAdapter adapter(queue);
+    ITCHParser<QueueProducerAdapter> parser(adapter);
 
     std::string dataFile = "./data/12302019.NASDAQ_ITCH50";
-
     std::string targetTicker = "AAPL    ";
+    double speedMultiplier = 3000.0;
 
-    std::cout << "Starting ITCH 5.0 Ingress for " << targetTicker << "...\n";
+    std::thread parserThread([&]()
+    {
+        std::cout << "Starting parser thread...\n";
+        parser.parse(dataFile, targetTicker);
+        producerDone.store(true, std::memory_order_release);
+        std::cout << "parserThread thread done.\n";
+    });
 
-    parser.parse(dataFile, targetTicker);
+    ReplayEngine engine(queue, producerDone);
+    engine.runReplay(speedMultiplier);
 
-    auto snap = engine.getSnapshot(10);
+    parserThread.join();
+
+    auto snap = engine.getOrderBook().getSnapshot(10);
     renderUI(snap, obs, 0);
 
     return 0;

@@ -204,7 +204,9 @@ class OrderBook
 public:
     explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), limitPool(1000), lastTradePrice(0) {}
 
-    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy, bool isMarketData = false);
+    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy);
+
+    void replayOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy);
 
     void cancelOrder(uint64_t id);
 
@@ -212,7 +214,7 @@ public:
 
     void reduceOrder(uint64_t id, uint32_t newQuantity);
 
-    void replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, bool isMarketData = false);
+    void replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity);
 
     Order* getOrder(uint64_t id);
 
@@ -243,4 +245,5 @@ private:
 
     void match(Order* incomingOrder);
     void executeMatch(Order* incomingOrder, LimitLevel* level);
+    void internalAddOrder(Order* newOrder, uint64_t id, int64_t price);
 };

@@ -5,19 +5,26 @@
 #pragma once
 #include <atomic>
 #include <vector>
+#include <bit>
+#include <stdexcept>
 
-template<typename T, size_t Capacity>
+template<typename T>
 class SPSCQueue {
 public:
-    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
-
-    SPSCQueue() : head(0), tail(0) {
-        buffer.resize(Capacity);
+    SPSCQueue(size_t capacity) : head(0), tail(0), capacity_mask(capacity-1) {
+        if (!std::has_single_bit(capacity))
+        {
+            throw std::invalid_argument("Capacity must be a power of 2");
+        }
+        buffer.resize(capacity);
     }
+
+    SPSCQueue(const SPSCQueue&) = delete;
+    SPSCQueue& operator=(const SPSCQueue&) = delete;
 
     bool push(const T& item) {
         const size_t currentTail = tail.load(std::memory_order_relaxed);
-        const size_t nextTail = (currentTail + 1) & (Capacity - 1);
+        const size_t nextTail = (currentTail + 1) & capacity_mask;
 
         if (nextTail == head.load(std::memory_order_acquire)) {
             return false;
@@ -35,12 +42,14 @@ public:
         }
 
         item = buffer[currentHead];
-        head.store((currentHead + 1) & (Capacity - 1), std::memory_order_release);
+        head.store((currentHead + 1) & capacity_mask, std::memory_order_release);
         return true;
     }
 
 private:
     std::vector<T> buffer;
+
+    const size_t capacity_mask;
     alignas(64) std::atomic<size_t> head;
     alignas(64) std::atomic<size_t> tail;
 };

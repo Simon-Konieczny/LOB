@@ -1,17 +1,27 @@
 #include "OrderBook.hpp"
 
-void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy, bool isMarketData) {
+void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy) {
     auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
     orderMap[id] = newOrder;
 
-    if (!isMarketData)
-    {
-        match(newOrder);
-    }
+    match(newOrder);
 
+    internalAddOrder(newOrder, id, price);
+}
+
+void OrderBook::replayOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy)
+{
+    auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
+    orderMap[id] = newOrder;
+
+    internalAddOrder(newOrder, id, price);
+}
+
+void OrderBook::internalAddOrder(Order* newOrder, uint64_t id, int64_t price)
+{
     if (newOrder->quantity > 0)
     {
-        if (side == Side::Buy) {
+        if (newOrder->side == Side::Buy) {
             // Binary search for descending order O(log N)
             auto it = std::lower_bound(bids.begin(), bids.end(), price,
                 [](const LimitLevel* level, int64_t p) {return level->price > p;});
@@ -238,10 +248,10 @@ void OrderBook::reduceOrder(uint64_t id, uint32_t quantityReduction)
         return;
     }
 
-    modifyOrder(id, order->price, newQuantity);
+    order->quantity = newQuantity;
 }
 
-void OrderBook::replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, bool isMarketData)
+void OrderBook::replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity)
 {
     Order* oldOrder = getOrder(oldId);
     if (!oldOrder) return;
@@ -250,7 +260,7 @@ void OrderBook::replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, u
 
     cancelOrder(oldId);
 
-    addOrder(newId, newPrice, newQuantity, 0, side, STPBehavior::None, isMarketData);
+    replayOrder(newId, newPrice, newQuantity, 0, side, STPBehavior::None);
 }
 
 Order* OrderBook::getOrder(uint64_t id)

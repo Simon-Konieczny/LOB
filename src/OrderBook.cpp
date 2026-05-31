@@ -318,21 +318,21 @@ BookSnapshot OrderBook::getSnapshot(int depth) {
 // book update for OFI calculation
 void OrderBook::fireBookUpdate(const uint64_t timestamp) const
 {
-    orderUpdateQueue.push(BookUpdate(
+    orderUpdateQueue.push(BookUpdate{
         getBestBid(),
         getBestAsk(),
         getBestBidVolume(),
         getBestAskVolume(),
         timestamp
-        ));
+        });
 }
 
 void OrderBook::fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price) const
 {
-    tradeQueue_.push(ITradeObserver::TradeRecord(
+    tradeQueue_.push(ITradeObserver::TradeRecord{
         makerId,
         takerId,
         quantity,
         price
-        ));
+        });
 }

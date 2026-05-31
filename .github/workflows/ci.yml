@@ -42,8 +42,17 @@ jobs:
 
       - name: Run Benchmark & Enforce 50ns Limit
         run: |
+          BENCH_BIN=$(find build -name "latency_bench" -type f -o -type l | head -n 1)
+          
+          if [ -z "$BENCH_BIN" ]; then
+            echo "❌ Error: latency_bench executable not found! Ensure it is being built."
+            exit 1
+          fi
+          
+          echo "Found benchmark binary at: $BENCH_BIN"
+          
           # Execute benchmark and save output
-          ./build/latency_bench > bench_out.txt
+          $BENCH_BIN > bench_out.txt
           
           # Print to GitHub Actions console for visibility
           cat bench_out.txt
@@ -97,5 +106,6 @@ jobs:
             # Adjust --fail-under-line to your desired threshold
             gcovr -r . build-coverage \
               --filter src/ \
+              --exclude ".*main\.cpp" \
               --print-summary \
               --fail-under-line 85

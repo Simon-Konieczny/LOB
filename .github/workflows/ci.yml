@@ -20,6 +20,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Get Latest CMake
+        uses: lukka/get-cmake@latest
+
       - name: Install Dependencies (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja
@@ -90,9 +93,9 @@ jobs:
 
       - name: Generate Coverage Report & Enforce Limit
         run: |
-          # Fails the CI if line coverage for the /src/ directory is below 85%
-          # Adjust --fail-under-line to your desired threshold
-          gcovr -r . --build-root build-coverage \
-            --filter src/ \
-            --print-summary \
-            --fail-under-line 85
+            # Fails the CI if line coverage for the /src/ directory is below 85%
+            # Adjust --fail-under-line to your desired threshold
+            gcovr -r . build-coverage \
+              --filter src/ \
+              --print-summary \
+              --fail-under-line 85

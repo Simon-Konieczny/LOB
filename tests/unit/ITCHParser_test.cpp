@@ -250,3 +250,101 @@ TEST_F(ITCHParserTest, IgnoresUntrackedOrders) {
     // All should be ignored because '999' is not in activeTargetOrders
     EXPECT_EQ(consumer.messages.size(), 0);
 }
+
+TEST_F(ITCHParserTest, OrderExecutedWithPrice_ReducesTrackedOrder) {
+    // 1. Add tracking order
+    ITCH5_AddOrder addMsg{};
+    addMsg.msgType = 'A';
+    setTicker(addMsg.stock, "AAPL");
+    addMsg.orderRefNum = ITCHParser<MockMessageConsumer>::swap64(500);
+    writeMessage(addMsg);
+
+    // 2. Execute with price (Message Type 'C')
+    ITCH5_OrderExecutedWithPrice execMsg{};
+    execMsg.msgType = 'C';
+    execMsg.orderRefNum = ITCHParser<MockMessageConsumer>::swap64(500);
+    execMsg.executedShares = ITCHParser<MockMessageConsumer>::swap32(200);
+    setTimestamp(execMsg.timestamp, 111222333);
+    writeMessage(execMsg);
+
+    outStream.close();
+
+    ITCHParser<MockMessageConsumer> parser(consumer);
+    parser.parse(testFilepath, "AAPL    ");
+
+    ASSERT_EQ(consumer.messages.size(), 2);
+
+    // Verify the 'C' message parsed correctly
+    const auto& execNorm = consumer.messages[1];
+    EXPECT_EQ(execNorm.action, MsgAction::Reduce);
+    EXPECT_EQ(execNorm.orderId, 500);
+    EXPECT_EQ(execNorm.quantity, 200);
+    EXPECT_EQ(execNorm.timestamp, 111222333);
+}
+
+TEST_F(ITCHParserTest, AddOrderMPID_FiltersTargetTicker) {
+    // Add order with MPID for AAPL (Message Type 'F')
+    ITCH5_AddOrderMPID msgAAPL{};
+    msgAAPL.msgType = 'F';
+    setTicker(msgAAPL.stock, "AAPL");
+    msgAAPL.orderRefNum = ITCHParser<MockMessageConsumer>::swap64(600);
+    msgAAPL.side = 'S';
+    msgAAPL.shares = ITCHParser<MockMessageConsumer>::swap32(1000);
+    msgAAPL.price = ITCHParser<MockMessageConsumer>::swap32(2500000); // 250.0000
+    setTimestamp(msgAAPL.timestamp, 444555666);
+    writeMessage(msgAAPL);
+
+    // Add order with MPID for MSFT (should be ignored)
+    ITCH5_AddOrderMPID msgMSFT{};
+    msgMSFT.msgType = 'F';
+    setTicker(msgMSFT.stock, "MSFT");
+    msgMSFT.orderRefNum = ITCHParser<MockMessageConsumer>::swap64(601);
+    writeMessage(msgMSFT);
+
+    outStream.close();
+
+    ITCHParser<MockMessageConsumer> parser(consumer);
+    parser.parse(testFilepath, "AAPL    ");
+
+    ASSERT_EQ(consumer.messages.size(), 1);
+
+    // Verify the 'F' message parsed correctly
+    const auto& normMsg = consumer.messages[0];
+    EXPECT_EQ(normMsg.action, MsgAction::Add);
+    EXPECT_EQ(normMsg.side, Side::Sell);
+    EXPECT_EQ(normMsg.orderId, 600);
+    EXPECT_EQ(normMsg.quantity, 1000);
+    EXPECT_EQ(normMsg.price, 2500000);
+    EXPECT_EQ(normMsg.timestamp, 444555666);
+}
+
+TEST_F(ITCHParserTest, CancelOrder_ReducesTrackedOrder) {
+    // 1. Add tracking order
+    ITCH5_AddOrder addMsg{};
+    addMsg.msgType = 'A';
+    setTicker(addMsg.stock, "AAPL");
+    addMsg.orderRefNum = ITCHParser<MockMessageConsumer>::swap64(700);
+    writeMessage(addMsg);
+
+    // 2. Partial Cancel (Message Type 'X')
+    ITCH5_CancelOrder cnlMsg{};
+    cnlMsg.msgType = 'X';
+    cnlMsg.orderRefNum = ITCHParser<MockMessageConsumer>::swap64(700);
+    cnlMsg.canceledShares = ITCHParser<MockMessageConsumer>::swap32(50);
+    setTimestamp(cnlMsg.timestamp, 777888999);
+    writeMessage(cnlMsg);
+
+    outStream.close();
+
+    ITCHParser<MockMessageConsumer> parser(consumer);
+    parser.parse(testFilepath, "AAPL    ");
+
+    ASSERT_EQ(consumer.messages.size(), 2);
+
+    // Verify the 'X' message parsed correctly
+    const auto& cnlNorm = consumer.messages[1];
+    EXPECT_EQ(cnlNorm.action, MsgAction::Reduce);
+    EXPECT_EQ(cnlNorm.orderId, 700);
+    EXPECT_EQ(cnlNorm.quantity, 50);
+    EXPECT_EQ(cnlNorm.timestamp, 777888999);
+}

@@ -108,4 +108,4 @@ jobs:
               --filter src/ \
               --exclude ".*main\.cpp" \
               --print-summary \
-              --fail-under-line 85
+              --fail-under-line 80

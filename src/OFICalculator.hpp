@@ -1,0 +1,61 @@
+//
+// Created by Simon Konieczny on 25/05/2026.
+//
+#pragma once
+
+#ifndef LOB_OFICALCULATOR_HPP
+#define LOB_OFICALCULATOR_HPP
+
+#include "IBookObserver.hpp"
+#include "OrderBook.hpp"
+#include <chrono>
+#include <deque>
+
+#endif
+
+class OFICalculator : public ITradeObserver, public IBookObserver
+{
+public:
+    struct OFIEvent
+    {
+        uint64_t timestamp;
+        int64_t value;
+    };
+
+    explicit OFICalculator(SPSCQueue<BookUpdate>& bookUpdateQueue, SPSCQueue<TradeRecord>& tradeRecordQueue, std::atomic<bool>& producerDone) :
+    bookUpdateQueue_(bookUpdateQueue), tradeRecordQueue_(tradeRecordQueue), producerDone_(producerDone) {}
+
+    void runOfiCalculator();
+    void runTradeCapture();
+
+    std::deque<TradeRecord> recentTrades;
+
+    [[nodiscard]] int64_t getOFI_1s() const { return rolling_1s_; }
+    [[nodiscard]] int64_t getOFI_5s() const { return rolling_5s_; }
+    [[nodiscard]] int64_t getOFI_30s() const { return rolling_30s_; }
+private:
+    void onBookUpdate(const BookUpdate& update) override;
+    void onTrade(const TradeRecord& tradeRecord) override;
+
+    void pruneOldEvents(uint64_t now);
+
+    SPSCQueue<BookUpdate>& bookUpdateQueue_;
+    SPSCQueue<TradeRecord>& tradeRecordQueue_;
+    std::atomic<bool>& producerDone_;
+
+    std::deque<OFIEvent> history_1s_;
+    std::deque<OFIEvent> history_5s_;
+    std::deque<OFIEvent> history_30s_;
+
+    // running sums
+    int64_t rolling_1s_ = 0;
+    int64_t rolling_5s_ = 0;
+    int64_t rolling_30s_ = 0;
+
+    // state tracking for t-1
+    bool is_initialized_ = false;
+    int64_t prev_bid_price_ = 0;
+    uint32_t prev_bid_vol_ = 0;
+    int64_t prev_ask_price_ = 0;
+    uint32_t prev_ask_vol_ = 0;
+};

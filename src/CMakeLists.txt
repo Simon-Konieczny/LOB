@@ -5,7 +5,10 @@ add_library(lob_core OrderBook.cpp
         MmapReader.hpp
         ITCHParser.hpp
         NormalizedMsg.hpp
-        ReplayEngine.hpp)
+        ReplayEngine.hpp
+        IBookObserver.hpp
+        OFICalculator.hpp
+        OFICalculator.cpp)
 
 # main executable
 add_executable(lob_main main.cpp)

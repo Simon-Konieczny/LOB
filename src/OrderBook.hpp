@@ -3,12 +3,22 @@
 #include <unordered_map>
 #include <vector>
 
+#include "IBookObserver.hpp"
+#include "SPSCQueue.hpp"
+
+class OFICalculator;
+
 enum class Side { Buy, Sell };
 
 class ITradeObserver {
 public:
+    struct TradeRecord {
+        uint64_t mId; uint64_t tId; uint32_t qty; int64_t price;
+    };
+
     virtual ~ITradeObserver() = default;
-    virtual void onTrade(uint64_t makerId, uint64_t takerId, uint32_t qty, int64_t price) = 0;
+private:
+    virtual void onTrade(const TradeRecord& tradeRecord) = 0;
 };
 
 struct LevelInfo {
@@ -73,6 +83,8 @@ struct alignas(64) LimitLevel {
         totalVolume -= order->quantity;
         order->next = order->prev = nullptr;
     }
+
+    [[nodiscard]] uint32_t getTotalVolume() const { return totalVolume; }
 
     LimitLevel(int64_t price, uint32_t total_volume, Order* head, Order* tail)
         : price(price),
@@ -202,30 +214,44 @@ private:
 class OrderBook
 {
 public:
-    explicit OrderBook(ITradeObserver* obs = nullptr) : observer(obs), pool(100000), limitPool(1000), lastTradePrice(0) {}
+    explicit OrderBook(SPSCQueue<BookUpdate>& orderUpdateQueue) : pool(100000), limitPool(1000), lastTradePrice(0), orderUpdateQueue(orderUpdateQueue) {}
 
-    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy);
+    void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, uint64_t timestamp, STPBehavior stpPolicy);
 
-    void replayOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy);
+    void replayOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, uint64_t timestamp, STPBehavior stpPolicy);
 
-    void cancelOrder(uint64_t id);
+    void cancelOrder(uint64_t id, uint64_t timestamp);
 
-    void modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity);
+    void modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity, uint64_t timestamp);
 
-    void reduceOrder(uint64_t id, uint32_t newQuantity);
+    void reduceOrder(uint64_t id, uint32_t newQuantity, uint64_t timestamp);
 
-    void replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity);
+    void replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, uint64_t timestamp);
 
     Order* getOrder(uint64_t id);
 
-    int64_t getBestBid() const {
+    int64_t getBestBid() const
+    {
         if (bids.empty()) return 0;
         return bids.front()->price; // O(1) Highest Bid
     }
 
-    int64_t getBestAsk() const {
+    int64_t getBestAsk() const
+    {
         if (asks.empty()) return 0;
         return asks.front()->price; // O(1) Lowest Ask
+    }
+
+    uint32_t getBestBidVolume() const
+    {
+        if (bids.empty()) return 0;
+        return bids.front()->totalVolume;
+    }
+
+    uint32_t getBestAskVolume() const
+    {
+        if (asks.empty()) return 0;
+        return asks.front()->totalVolume;
     }
 
     BookSnapshot getSnapshot(int depth);
@@ -233,7 +259,7 @@ public:
     int64_t getLastTradePrice() const {return lastTradePrice;}
 
 private:
-    ITradeObserver* observer;
+    SPSCQueue<BookUpdate>& orderUpdateQueue;
     OrderPool pool;
     LimitPool limitPool;
     std::vector<LimitLevel*> bids;
@@ -245,5 +271,6 @@ private:
 
     void match(Order* incomingOrder);
     void executeMatch(Order* incomingOrder, LimitLevel* level);
-    void internalAddOrder(Order* newOrder, uint64_t id, int64_t price);
+    void internalAddOrder(Order* newOrder, uint64_t id, int64_t price, uint64_t timestamp);
+    void fireBookUpdate(uint64_t timestamp) const;
 };

@@ -18,8 +18,8 @@
 class ReplayEngine
 {
 public:
-    ReplayEngine(SPSCQueue<NormalizedMsg>& queue, std::atomic<bool>& producerDone)
-    : queue_(queue), producerDone_(producerDone) {}
+    ReplayEngine(SPSCQueue<NormalizedMsg>& queue, std::atomic<bool>& producerDone, SPSCQueue<BookUpdate>& bookUpdateQueue)
+        : queue_(queue), producerDone_(producerDone), bookUpdateQueue_(bookUpdateQueue) {}
 
     void runReplay(double speedMultiplier = 0.0)
     {
@@ -64,23 +64,24 @@ public:
 
 private:
     SPSCQueue<NormalizedMsg>& queue_;
+    SPSCQueue<BookUpdate>& bookUpdateQueue_;
     std::atomic<bool>& producerDone_;
-    OrderBook book = OrderBook();
+    OrderBook book = OrderBook(bookUpdateQueue_);
 
     __attribute__((always_inline)) inline void processMessage(const NormalizedMsg& msg) {
         switch (msg.action)
         {
         case MsgAction::Add:
-            book.replayOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, STPBehavior::None);
+            book.replayOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, msg.timestamp, STPBehavior::None);
             break;
         case MsgAction::Reduce:
-            book.reduceOrder(msg.orderId, msg.quantity);
+            book.reduceOrder(msg.orderId, msg.quantity, msg.timestamp);
             break;
         case MsgAction::Cancel:
-            book.cancelOrder(msg.orderId);
+            book.cancelOrder(msg.orderId, msg.timestamp);
             break;
         case MsgAction::Replace:
-            book.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity);
+            book.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity, msg.timestamp);
             break;
         }
     }

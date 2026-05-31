@@ -214,7 +214,8 @@ private:
 class OrderBook
 {
 public:
-    explicit OrderBook(SPSCQueue<BookUpdate>& orderUpdateQueue) : pool(100000), limitPool(1000), lastTradePrice(0), orderUpdateQueue(orderUpdateQueue) {}
+    explicit OrderBook(SPSCQueue<BookUpdate>& orderUpdateQueue, SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue) :
+    pool(100000), limitPool(1000), lastTradePrice(0), orderUpdateQueue(orderUpdateQueue), tradeQueue_(tradeQueue) {}
 
     void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, uint64_t timestamp, STPBehavior stpPolicy);
 
@@ -260,6 +261,7 @@ public:
 
 private:
     SPSCQueue<BookUpdate>& orderUpdateQueue;
+    SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue_;
     OrderPool pool;
     LimitPool limitPool;
     std::vector<LimitLevel*> bids;
@@ -273,4 +275,5 @@ private:
     void executeMatch(Order* incomingOrder, LimitLevel* level);
     void internalAddOrder(Order* newOrder, uint64_t id, int64_t price, uint64_t timestamp);
     void fireBookUpdate(uint64_t timestamp) const;
+    void fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price) const;
 };

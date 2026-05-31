@@ -18,8 +18,8 @@
 class ReplayEngine
 {
 public:
-    ReplayEngine(SPSCQueue<NormalizedMsg>& queue, std::atomic<bool>& producerDone, SPSCQueue<BookUpdate>& bookUpdateQueue)
-        : queue_(queue), producerDone_(producerDone), bookUpdateQueue_(bookUpdateQueue) {}
+    ReplayEngine(SPSCQueue<NormalizedMsg>& queue, std::atomic<bool>& producerDone, SPSCQueue<BookUpdate>& bookUpdateQueue, SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue)
+        : queue_(queue), producerDone_(producerDone), bookUpdateQueue_(bookUpdateQueue), tradeQueue_(tradeQueue) {}
 
     void runReplay(double speedMultiplier = 0.0)
     {
@@ -65,8 +65,9 @@ public:
 private:
     SPSCQueue<NormalizedMsg>& queue_;
     SPSCQueue<BookUpdate>& bookUpdateQueue_;
+    SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue_;
     std::atomic<bool>& producerDone_;
-    OrderBook book = OrderBook(bookUpdateQueue_);
+    OrderBook book = OrderBook(bookUpdateQueue_, tradeQueue_);
 
     __attribute__((always_inline)) inline void processMessage(const NormalizedMsg& msg) {
         switch (msg.action)

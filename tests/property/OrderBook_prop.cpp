@@ -39,36 +39,47 @@ namespace rc {
 }
 
 RC_GTEST_PROP(OrderBookProperties, NoOrderMatchesItself, (const std::vector<OrderAction>& actions)) {
-    SequenceObserver propertyObs;
-    OrderBook testBook(&propertyObs);
+    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
+    SPSCQueue<ITradeObserver::TradeRecord> tradeQueue(65536);
+    OrderBook testBook(bookUpdateQueue, tradeQueue);
+
+    std::vector<ITradeObserver::TradeRecord> allTrades;
 
     for (const auto& action : actions) {
         if (action.isCancel) {
-            testBook.cancelOrder(action.id);
+            testBook.cancelOrder(action.id, 0);
         } else {
             // Only add if it doesn't already exist to avoid duplicate ID edge cases
             if (testBook.getOrder(action.id) == nullptr) {
-                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::None);
+                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, 0, STPBehavior::None);
             }
+        }
+
+        // Drain the lock-free queue into local vector so it doesn't hit capacity
+        // during long rapidcheck sequence generations
+        ITradeObserver::TradeRecord trade;
+        while (tradeQueue.pop(trade)) {
+            allTrades.push_back(trade);
         }
     }
 
     // An order ID should never appear as both maker and taker in the same trade
-    for (const auto& trade : propertyObs.trades) {
-        RC_ASSERT(trade.makerId != trade.takerId);
+    for (const auto& trade : allTrades) {
+        RC_ASSERT(trade.mId != trade.tId);
     }
 }
 
 RC_GTEST_PROP(OrderBookProperties, BookNeverCrosses, (const std::vector<OrderAction>& actions)) {
-    SequenceObserver propertyObs;
-    OrderBook testBook(&propertyObs);
+    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
+    SPSCQueue<ITradeObserver::TradeRecord> tradeQueue(65536);
+    OrderBook testBook(bookUpdateQueue, tradeQueue);
 
     for (const auto& action : actions) {
         if (action.isCancel) {
-            testBook.cancelOrder(action.id);
+            testBook.cancelOrder(action.id, 0);
         } else {
             if (testBook.getOrder(action.id) == nullptr) {
-                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, STPBehavior::None);
+                testBook.addOrder(action.id, action.price, action.qty, action.traderId, action.side, 0, STPBehavior::None);
             }
         }
 
@@ -80,5 +91,12 @@ RC_GTEST_PROP(OrderBookProperties, BookNeverCrosses, (const std::vector<OrderAct
         if (bestBid > 0 && bestAsk > 0) {
             RC_ASSERT(bestBid < bestAsk);
         }
+
+        // Empty the queues so they don't block
+        BookUpdate update;
+        while (bookUpdateQueue.pop(update)) {}
+
+        ITradeObserver::TradeRecord trade;
+        while (tradeQueue.pop(trade)) {}
     }
 }

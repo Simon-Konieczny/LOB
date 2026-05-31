@@ -7,23 +7,89 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-test:
-    name: Build & Test (Apple Silicon)
-    # macos-14 provides M1 (ARM64) runners, matching local M4 Pro architecture
-    runs-on: macos-14
+  build-and-bench:
+    name: Build & Bench (${{ matrix.os }})
+    strategy:
+      matrix:
+        # Runs the job twice: once on Ubuntu, once on Apple Silicon
+        os: [ubuntu-latest, macos-14]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Build Tools
+      - name: Install Dependencies (macOS)
+        if: runner.os == 'macOS'
         run: brew install ninja
 
-      - name: Configure CMake
+      - name: Install Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure CMake (Release)
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build Engine and Tests
+      - name: Build Engine, Tests, and Benchmarks
         run: cmake --build build -j 3
 
       - name: Execute Test Suite
         run: ctest --test-dir build --output-on-failure
+
+      - name: Run Benchmark & Enforce 50ns Limit
+        run: |
+          # Execute benchmark and save output
+          ./build/latency_bench > bench_out.txt
+          
+          # Print to GitHub Actions console for visibility
+          cat bench_out.txt
+
+          # Parse the p50 latency from your custom ASCII output
+          P50=$(awk '/p50  :/ {print $3}' bench_out.txt)
+
+          # Use awk to do floating-point comparison and fail the step if > 50ns
+          awk -v p50="$P50" -v threshold=50.0 'BEGIN {
+            if (p50 > threshold) {
+              print "❌ Error: p50 latency (" p50 " ns) exceeds the " threshold " ns limit!"
+              exit 1
+            } else {
+              print "✅ Success: p50 latency (" p50 " ns) is within the limit."
+              exit 0
+            }
+          }'
+
+  coverage:
+    name: Code Coverage (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        # gcovr is a Python utility that parses GCC/Clang coverage data
+        run: sudo apt-get update && sudo apt-get install -y ninja-build gcovr
+
+      - name: Configure CMake (Coverage)
+        # Inject the --coverage flags and enforce Debug mode
+        run: >
+          cmake -B build-coverage -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="--coverage -O0 -fno-inline"
+          -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+
+      - name: Build Engine and Tests
+        run: cmake --build build-coverage -j 3
+
+      - name: Execute Test Suite
+        run: ctest --test-dir build-coverage --output-on-failure
+
+      - name: Generate Coverage Report & Enforce Limit
+        run: |
+          # Fails the CI if line coverage for the /src/ directory is below 85%
+          # Adjust --fail-under-line to your desired threshold
+          gcovr -r . --build-root build-coverage \
+            --filter src/ \
+            --print-summary \
+            --fail-under-line 85

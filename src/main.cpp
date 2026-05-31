@@ -95,7 +95,7 @@ int main() {
         std::cout << "parserThread thread done.\n";
     });
 
-    ReplayEngine engine(orderMessageQueue, producerDone, bookUpdateQueue);
+    ReplayEngine engine(orderMessageQueue, producerDone, bookUpdateQueue, tradeRecordQueue);
 
     std::thread ofiCalculatorThread([&]()
     {

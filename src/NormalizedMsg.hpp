@@ -21,10 +21,11 @@ enum class MsgAction : uint8_t
 
 struct NormalizedMsg
 {
-    MsgAction action;
-    Side side;
-    uint32_t quantity;
-    uint64_t orderId;
-    uint64_t newOrderId;
-    int64_t price;
+    MsgAction action = {};
+    Side side = {};
+    uint32_t quantity = {};
+    uint64_t orderId = {};
+    uint64_t newOrderId = {};
+    int64_t price = {};
+    uint64_t timestamp = {};
 };

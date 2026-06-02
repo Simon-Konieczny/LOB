@@ -4,7 +4,11 @@ add_library(lob_core OrderBook.cpp
         ITCH50.hpp
         MmapReader.hpp
         ITCHParser.hpp
-        NormalizedMsg.hpp)
+        NormalizedMsg.hpp
+        ReplayEngine.hpp
+        IBookObserver.hpp
+        OFICalculator.hpp
+        OFICalculator.cpp)
 
 # main executable
 add_executable(lob_main main.cpp)

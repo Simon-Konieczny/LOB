@@ -1,17 +1,31 @@
 #include "OrderBook.hpp"
+#include "OFICalculator.hpp"
 
-void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, STPBehavior stpPolicy, bool isMarketData) {
+#include <chrono>
+
+void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, uint64_t timestamp, STPBehavior stpPolicy) {
     auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
     orderMap[id] = newOrder;
 
-    if (!isMarketData)
-    {
-        match(newOrder);
-    }
+    match(newOrder);
 
+    internalAddOrder(newOrder, id, price, timestamp);
+}
+
+void OrderBook::replayOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, uint64_t timestamp, STPBehavior stpPolicy)
+{
+    // consider quantity = 0 here to avoid needles acquire/release cycles
+    auto* newOrder = pool.acquire(id, price, quantity, traderId, side, stpPolicy);
+    orderMap[id] = newOrder;
+
+    internalAddOrder(newOrder, id, price, timestamp);
+}
+
+void OrderBook::internalAddOrder(Order* newOrder, uint64_t id, int64_t price, uint64_t timestamp)
+{
     if (newOrder->quantity > 0)
     {
-        if (side == Side::Buy) {
+        if (newOrder->side == Side::Buy) {
             // Binary search for descending order O(log N)
             auto it = std::lower_bound(bids.begin(), bids.end(), price,
                 [](const LimitLevel* level, int64_t p) {return level->price > p;});
@@ -32,6 +46,7 @@ void OrderBook::addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t
             }
             (*it)->appendOrder(newOrder);
         }
+        fireBookUpdate(timestamp);
     } else {
         orderMap.erase(id);
         pool.release(newOrder);
@@ -116,10 +131,7 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
 
         lastTradePrice = maker->price;
 
-        if (observer)
-        {
-            observer->onTrade(maker->id, taker->id, fillQty, maker->price);
-        }
+        fireTradeUpdate(maker->id, taker->id, fillQty, maker->price);
 
         taker->quantity -= fillQty;
         maker->quantity -= fillQty;
@@ -135,7 +147,7 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
     }
 }
 
-void OrderBook::cancelOrder(uint64_t id) {
+void OrderBook::cancelOrder(uint64_t id, uint64_t timestamp) {
     const auto orderIt = orderMap.find(id);
     if (orderIt == orderMap.end()) return; // order not found
 
@@ -171,9 +183,10 @@ void OrderBook::cancelOrder(uint64_t id) {
 
     orderMap.erase(id);
     pool.release(order);
+    fireBookUpdate(timestamp);
 }
 
-void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
+void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity, uint64_t timestamp)
 {
     const auto orderIt = orderMap.find(id);
     if (orderIt == orderMap.end()) return;
@@ -189,9 +202,9 @@ void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
         Side cachedSide = order->side;
         STPBehavior cachedStp = order->stpPolicy;
 
-        cancelOrder(id);
+        cancelOrder(id, timestamp);
 
-        addOrder(id, newPrice, newQuantity, cachedTraderId, cachedSide, cachedStp);
+        addOrder(id, newPrice, newQuantity, cachedTraderId, cachedSide, timestamp, cachedStp);
 
     }
     else
@@ -220,9 +233,10 @@ void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity)
             }
         }
     }
+    fireBookUpdate(timestamp);
 }
 
-void OrderBook::reduceOrder(uint64_t id, uint32_t quantityReduction)
+void OrderBook::reduceOrder(uint64_t id, uint32_t delta, uint64_t timestamp)
 {
     // for ITCH 5.0 OrderCancel
     const auto orderIt = orderMap.find(id);
@@ -230,27 +244,49 @@ void OrderBook::reduceOrder(uint64_t id, uint32_t quantityReduction)
 
     Order* order = orderIt->second;
 
-    uint32_t newQuantity = order->quantity - quantityReduction;
+    const uint32_t newQuantity = order->quantity - delta;
 
     if (newQuantity == 0)
     {
-        cancelOrder(id);
+        cancelOrder(id, timestamp);
         return;
     }
 
-    modifyOrder(id, order->price, newQuantity);
+    if (order->side == Side::Buy)
+    {
+        auto it = std::lower_bound(bids.begin(), bids.end(), order->price,
+            [](const LimitLevel* l, int64_t p) {return l->price > p;});
+
+        if (it != bids.end() && (*it)->price == order->price)
+        {
+            (*it)->totalVolume -= delta;
+        }
+    } else
+    {
+        auto it = std::lower_bound(asks.begin(), asks.end(), order->price,
+            [](const LimitLevel* l, int64_t p) {return l->price < p;});
+
+        if (it != asks.end() && (*it)->price == order->price)
+        {
+            (*it)->totalVolume -= delta;
+        }
+    }
+
+    order->quantity = newQuantity;
+
+    fireBookUpdate(timestamp);
 }
 
-void OrderBook::replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, bool isMarketData)
+void OrderBook::replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, uint64_t timestamp)
 {
     Order* oldOrder = getOrder(oldId);
     if (!oldOrder) return;
 
     Side side = oldOrder->side;
 
-    cancelOrder(oldId);
+    cancelOrder(oldId, timestamp);
 
-    addOrder(newId, newPrice, newQuantity, 0, side, STPBehavior::None, isMarketData);
+    replayOrder(newId, newPrice, newQuantity, 0, side, timestamp, STPBehavior::None);
 }
 
 Order* OrderBook::getOrder(uint64_t id)
@@ -277,4 +313,26 @@ BookSnapshot OrderBook::getSnapshot(int depth) {
     }
 
     return snapshot;
+}
+
+// book update for OFI calculation
+void OrderBook::fireBookUpdate(const uint64_t timestamp) const
+{
+    orderUpdateQueue.push(BookUpdate{
+        getBestBid(),
+        getBestAsk(),
+        getBestBidVolume(),
+        getBestAskVolume(),
+        timestamp
+        });
+}
+
+void OrderBook::fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price) const
+{
+    tradeQueue_.push(ITradeObserver::TradeRecord{
+        makerId,
+        takerId,
+        quantity,
+        price
+        });
 }

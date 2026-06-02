@@ -12,21 +12,18 @@ typedef size_t rsize_t;
 #include <string>
 #include "../src/OrderBook.hpp"
 
-class NullObserver : public ITradeObserver {
-    void onTrade(uint64_t, uint64_t, uint32_t, int64_t) override {}
-};
-
 std::vector<double> g_latencies;
 
 static void BM_OrderBookAdd(benchmark::State& state)
 {
-    NullObserver obs;
-    OrderBook book(&obs);
+    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
+    SPSCQueue<ITradeObserver::TradeRecord> tradeQueue(65536);
+    OrderBook book(bookUpdateQueue, tradeQueue);
 
     // Warm up the cache and memory pool
     for (int i = 0; i < 1000; ++i)
     {
-        book.addOrder(i, 100, 1, 1, Side::Sell, STPBehavior::CancelBoth);
+        book.addOrder(i, 100, 1, 1, Side::Sell, 0, STPBehavior::CancelBoth);
     }
 
     uint64_t orderId = 200000;
@@ -43,7 +40,7 @@ static void BM_OrderBookAdd(benchmark::State& state)
         // prevent compiler from optimizing orderId + memory ops
         benchmark::DoNotOptimize(orderId);
 
-        book.addOrder(orderId++, 100, 1, traderId++, Side::Buy, STPBehavior::CancelBoth);
+        book.addOrder(orderId++, 100, 1, traderId++, Side::Buy, 0, STPBehavior::CancelBoth);
 
         benchmark::ClobberMemory();
 

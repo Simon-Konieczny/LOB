@@ -10,8 +10,6 @@ typedef size_t rsize_t;
 #include <rapidcheck/gtest.h>
 #include "../../src/OrderBook.hpp"
 
-#include "../common/OrderBookHelpers.cpp"
-
 struct OrderAction {
     bool isCancel;
     uint64_t id;

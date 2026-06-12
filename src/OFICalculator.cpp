@@ -135,6 +135,7 @@ void OFICalculator::pruneOldEvents(uint64_t now)
 
 void OFICalculator::onTrade(const TradeRecord& tradeRecord)
 {
-    recentTrades.push_front(tradeRecord);
-    if (recentTrades.size() > 5) recentTrades.pop_back();
+    std::lock_guard<std::mutex> lock(tradesMutex_);
+    recentTrades_.push_front(tradeRecord);
+    if (recentTrades_.size() > 5) recentTrades_.pop_back();
 }

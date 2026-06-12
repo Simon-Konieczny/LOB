@@ -67,9 +67,9 @@ TEST_F(OFICalculatorTest, CapturesRecentTrades) {
     calc.runTradeCapture();
 
     // Should only hold the latest 5 trades
-    ASSERT_EQ(calc.recentTrades.size(), 5);
-    EXPECT_EQ(calc.recentTrades.front().price, 106); // Latest trade
-    EXPECT_EQ(calc.recentTrades.back().price, 102);  // Oldest retained trade
+    ASSERT_EQ(calc.getRecentTrades().size(), 5);
+    EXPECT_EQ(calc.getRecentTrades().front().price, 106); // Latest trade
+    EXPECT_EQ(calc.getRecentTrades().back().price, 102);  // Oldest retained trade
 }
 
 TEST_F(OFICalculatorTest, EvaluatesPriceLevelChangesAndZeroOFI) {

@@ -3,7 +3,6 @@ add_executable(unit_tests
         unit/OrderBook_test.cpp
         unit/ITCHParser_test.cpp
         unit/SPSCQueue_test.cpp
-        common/OrderBookHelpers.cpp
         unit/ReplayEngine_test.cpp
         unit/OFICalculator_test.cpp
 )

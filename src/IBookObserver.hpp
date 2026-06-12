@@ -21,6 +21,5 @@ class IBookObserver
 {
 public:
     virtual ~IBookObserver() = default;
-private:
     virtual void onBookUpdate(const BookUpdate&) = 0;
 };

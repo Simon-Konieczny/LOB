@@ -19,7 +19,7 @@ class ReplayEngine
 {
 public:
     ReplayEngine(SPSCQueue<NormalizedMsg>& queue, std::atomic<bool>& producerDone, SPSCQueue<BookUpdate>& bookUpdateQueue, SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue)
-        : queue_(queue), producerDone_(producerDone), bookUpdateQueue_(bookUpdateQueue), tradeQueue_(tradeQueue) {}
+        : queue_(queue), bookUpdateQueue_(bookUpdateQueue), tradeQueue_(tradeQueue), producerDone_(producerDone) {}
 
     void runReplay(double speedMultiplier = 0.0)
     {

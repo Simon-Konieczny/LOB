@@ -48,9 +48,9 @@ void renderUI(const BookSnapshot& snap, OFICalculator& ofiCalculator) {
     }
 
     std::cout << "\nRECENT TRADES:\n";
-    for (const auto& t : ofiCalculator.recentTrades) {
-        std::cout << " [+] Match: ID " << t.tId << " hit ID " << t.mId
-                  << " | Qty: " << t.qty << " @ " << t.price << "\n";
+    for (const auto& [mId, tId, qty, price] : ofiCalculator.getRecentTrades()) {
+        std::cout << " [+] Match: ID " << tId << " hit ID " << mId
+                  << " | Qty: " << qty << " @ " << price << "\n";
     }
 }
 

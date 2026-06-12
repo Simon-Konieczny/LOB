@@ -8,8 +8,8 @@
 
 #include "IBookObserver.hpp"
 #include "OrderBook.hpp"
-#include <chrono>
 #include <deque>
+#include <mutex>
 
 #endif
 
@@ -28,7 +28,11 @@ public:
     void runOfiCalculator();
     void runTradeCapture();
 
-    std::deque<TradeRecord> recentTrades;
+    [[nodiscard]] std::deque<TradeRecord> getRecentTrades() const
+    {
+        std::lock_guard<std::mutex> lock(tradesMutex_);
+        return recentTrades_;
+    }
 
     [[nodiscard]] int64_t getOFI_1s() const { return rolling_1s_; }
     [[nodiscard]] int64_t getOFI_5s() const { return rolling_5s_; }
@@ -38,6 +42,9 @@ private:
     void onTrade(const TradeRecord& tradeRecord) override;
 
     void pruneOldEvents(uint64_t now);
+
+    std::deque<TradeRecord> recentTrades_;
+    mutable std::mutex tradesMutex_;
 
     SPSCQueue<BookUpdate>& bookUpdateQueue_;
     SPSCQueue<TradeRecord>& tradeRecordQueue_;

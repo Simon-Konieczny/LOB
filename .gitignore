@@ -41,6 +41,7 @@
 *.dwo
 .DS_Store
 
+03_data
 data
 build-coverage
 .cache

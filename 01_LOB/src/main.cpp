@@ -9,6 +9,7 @@
 #include "ReplayEngine.hpp"
 #include "SPSCQueue.hpp"
 #include "OrderBook.hpp"
+#include "SnapshotWriter.hpp"
 #ifdef __APPLE__
 typedef size_t rsize_t;
 #endif
@@ -46,12 +47,6 @@ void renderUI(const BookSnapshot& snap, OFICalculator& ofiCalculator) {
         std::cout << "\033[32m" << std::setw(15) << bid.price
                   << " | " << std::setw(15) << bid.volume << "\033[0m\n";
     }
-
-    std::cout << "\nRECENT TRADES:\n";
-    for (const auto& [mId, tId, qty, price] : ofiCalculator.getRecentTrades()) {
-        std::cout << " [+] Match: ID " << tId << " hit ID " << mId
-                  << " | Qty: " << qty << " @ " << price << "\n";
-    }
 }
 
 class QueueProducerAdapter {
@@ -73,13 +68,19 @@ private:
 
 int main() {
     SPSCQueue<NormalizedMsg> orderMessageQueue(65536);
-    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
     SPSCQueue<ITradeObserver::TradeRecord> tradeRecordQueue(65536);
+    SPSCQueue<SnapshotRow> snapshotQueue(65536);
 
     std::atomic<bool> producerDone(false);
     std::atomic<bool> engineDone(false);
 
-    OFICalculator ofiCalculator(bookUpdateQueue, tradeRecordQueue, engineDone);
+    OFICalculator ofiCalculator;
+    OrderBook book(tradeRecordQueue);
+
+    SnapshotWriter writer(snapshotQueue, producerDone, book, ofiCalculator, 100'000'000);
+
+    book.addObserver(&ofiCalculator);
+    book.addObserver(&writer);
 
     QueueProducerAdapter adapter(orderMessageQueue);
     ITCHParser<QueueProducerAdapter> parser(adapter);
@@ -95,17 +96,11 @@ int main() {
         std::cout << "parserThread thread done.\n";
     });
 
-    ReplayEngine engine(orderMessageQueue, producerDone, bookUpdateQueue, tradeRecordQueue);
-
-    std::thread ofiCalculatorThread([&]()
-    {
-        ofiCalculator.runOfiCalculator();
+    std::thread writerThread([&]() {
+        writer.runSnapshotCapture("../03_data/lob_snapshots.csv");
     });
 
-    std::thread tradeRecordQueueThread([&]()
-    {
-        ofiCalculator.runTradeCapture();
-    });
+    ReplayEngine engine(orderMessageQueue, producerDone, tradeRecordQueue, book);
 
     std::thread observerThread([&]()
     {
@@ -123,8 +118,7 @@ int main() {
     engineDone.store(true, std::memory_order_release);
 
     parserThread.join();
-    ofiCalculatorThread.join();
-    tradeRecordQueueThread.join();
+    writerThread.join();
     observerThread.join();
 
     auto snap = engine.getOrderBook().getSnapshot(10);

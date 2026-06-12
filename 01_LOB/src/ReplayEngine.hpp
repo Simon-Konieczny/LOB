@@ -18,8 +18,11 @@
 class ReplayEngine
 {
 public:
-    ReplayEngine(SPSCQueue<NormalizedMsg>& queue, std::atomic<bool>& producerDone, SPSCQueue<BookUpdate>& bookUpdateQueue, SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue)
-        : queue_(queue), bookUpdateQueue_(bookUpdateQueue), tradeQueue_(tradeQueue), producerDone_(producerDone) {}
+    ReplayEngine(SPSCQueue<NormalizedMsg>& queue,
+        std::atomic<bool>& producerDone,
+        SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue,
+        OrderBook& orderBook)
+        : queue_(queue), tradeQueue_(tradeQueue), producerDone_(producerDone), book_(orderBook) {}
 
     void runReplay(double speedMultiplier = 0.0)
     {
@@ -60,34 +63,33 @@ public:
         std::cout << msgCount << " msgs" << std::endl;
     }
 
-    OrderBook& getOrderBook() { return book;}
+    [[nodiscard]] OrderBook& getOrderBook() const { return book_;}
 
 private:
     SPSCQueue<NormalizedMsg>& queue_;
-    SPSCQueue<BookUpdate>& bookUpdateQueue_;
     SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue_;
     std::atomic<bool>& producerDone_;
-    OrderBook book = OrderBook(bookUpdateQueue_, tradeQueue_);
+    OrderBook& book_;
 
     __attribute__((always_inline)) inline void processMessage(const NormalizedMsg& msg) {
         switch (msg.action)
         {
         case MsgAction::Add:
-            book.replayOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, msg.timestamp, STPBehavior::None);
+            book_.replayOrder(msg.orderId, msg.price, msg.quantity, 0, msg.side, msg.timestamp, STPBehavior::None);
             break;
         case MsgAction::Reduce:
-            book.reduceOrder(msg.orderId, msg.quantity, msg.timestamp);
+            book_.reduceOrder(msg.orderId, msg.quantity, msg.timestamp);
             break;
         case MsgAction::Cancel:
-            book.cancelOrder(msg.orderId, msg.timestamp);
+            book_.cancelOrder(msg.orderId, msg.timestamp);
             break;
         case MsgAction::Replace:
-            book.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity, msg.timestamp);
+            book_.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity, msg.timestamp);
             break;
         }
     }
 
-    inline void preciseSleepUntil(std::chrono::high_resolution_clock::time_point wakeUpTime) const {
+    static inline void preciseSleepUntil(std::chrono::high_resolution_clock::time_point wakeUpTime) {
         auto now = std::chrono::high_resolution_clock::now();
         if (now >= wakeUpTime) return;
 

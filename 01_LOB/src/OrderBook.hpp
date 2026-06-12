@@ -17,7 +17,6 @@ public:
     };
 
     virtual ~ITradeObserver() = default;
-private:
     virtual void onTrade(const TradeRecord& tradeRecord) = 0;
 };
 
@@ -214,8 +213,8 @@ private:
 class OrderBook
 {
 public:
-    explicit OrderBook(SPSCQueue<BookUpdate>& orderUpdateQueue, SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue) :
-    pool(100000), limitPool(1000), lastTradePrice(0), orderUpdateQueue(orderUpdateQueue), tradeQueue_(tradeQueue) {}
+    explicit OrderBook(SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue) :
+    pool(100000), limitPool(1000), lastTradePrice(0), tradeQueue_(tradeQueue) {}
 
     void addOrder(uint64_t id, int64_t price, uint32_t quantity, uint32_t traderId, Side side, uint64_t timestamp, STPBehavior stpPolicy);
 
@@ -233,39 +232,68 @@ public:
 
     int64_t getBestBid() const
     {
-        if (bids.empty()) return 0;
-        return bids.front()->price; // O(1) Highest Bid
+        if (bids_.empty()) return 0;
+        return bids_.front()->price; // O(1) Highest Bid
     }
 
     int64_t getBestAsk() const
     {
-        if (asks.empty()) return 0;
-        return asks.front()->price; // O(1) Lowest Ask
+        if (asks_.empty()) return 0;
+        return asks_.front()->price; // O(1) Lowest Ask
     }
 
     uint32_t getBestBidVolume() const
     {
-        if (bids.empty()) return 0;
-        return bids.front()->totalVolume;
+        if (bids_.empty()) return 0;
+        return bids_.front()->totalVolume;
     }
 
     uint32_t getBestAskVolume() const
     {
-        if (asks.empty()) return 0;
-        return asks.front()->totalVolume;
+        if (asks_.empty()) return 0;
+        return asks_.front()->totalVolume;
+    }
+
+    template<size_t N>
+    inline void getTopN(std::array<double, N>& out_bids,
+                    std::array<double, N>& out_asks,
+                    std::array<uint32_t, N>& out_bid_vols,
+                    std::array<uint32_t, N>& out_ask_vols) const
+    {
+        out_bids.fill(0.0);
+        out_asks.fill(0.0);
+        out_bid_vols.fill(0);
+        out_ask_vols.fill(0);
+
+        const size_t bid_limit = std::min(N, bids_.size());
+        for (size_t i = 0; i < bid_limit; ++i) {
+            out_bids[i] = static_cast<double>(bids_[i]->price);
+            out_bid_vols[i] = bids_[i]->getTotalVolume();
+        }
+
+        const size_t ask_limit = std::min(N, asks_.size());
+        for (size_t i = 0; i < ask_limit; ++i) {
+            out_asks[i]     = static_cast<double>(asks_[i]->price);
+            out_ask_vols[i] = asks_[i]->getTotalVolume();
+        }
     }
 
     BookSnapshot getSnapshot(int depth);
 
     int64_t getLastTradePrice() const {return lastTradePrice;}
 
+    void addObserver(IBookObserver* obs)
+    {
+        observers_.push_back(obs);
+    }
+
 private:
-    SPSCQueue<BookUpdate>& orderUpdateQueue;
+    std::vector<IBookObserver*> observers_;
     SPSCQueue<ITradeObserver::TradeRecord>& tradeQueue_;
     OrderPool pool;
     LimitPool limitPool;
-    std::vector<LimitLevel*> bids;
-    std::vector<LimitLevel*> asks;
+    std::vector<LimitLevel*> bids_;
+    std::vector<LimitLevel*> asks_;
 
     std::unordered_map<uint64_t, Order*> orderMap;
 
@@ -274,6 +302,20 @@ private:
     void match(Order* incomingOrder);
     void executeMatch(Order* incomingOrder, LimitLevel* level);
     void internalAddOrder(Order* newOrder, uint64_t id, int64_t price, uint64_t timestamp);
-    void fireBookUpdate(uint64_t timestamp) const;
     void fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price) const;
+
+    void notifyBookUpdate(const uint64_t timestamp) const
+    {
+        const auto update = BookUpdate{
+            getBestBid(),
+            getBestAsk(),
+            getBestBidVolume(),
+            getBestAskVolume(),
+            timestamp
+            };
+
+        for (auto* obs : observers_) {
+            obs->onBookUpdate(update);
+        }
+    }
 };

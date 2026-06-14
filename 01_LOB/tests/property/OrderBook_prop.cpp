@@ -37,9 +37,8 @@ namespace rc {
 }
 
 RC_GTEST_PROP(OrderBookProperties, NoOrderMatchesItself, (const std::vector<OrderAction>& actions)) {
-    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue(65536);
-    OrderBook testBook(bookUpdateQueue, tradeQueue);
+    OrderBook testBook(tradeQueue);
 
     std::vector<ITradeObserver::TradeRecord> allTrades;
 
@@ -68,9 +67,8 @@ RC_GTEST_PROP(OrderBookProperties, NoOrderMatchesItself, (const std::vector<Orde
 }
 
 RC_GTEST_PROP(OrderBookProperties, BookNeverCrosses, (const std::vector<OrderAction>& actions)) {
-    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue(65536);
-    OrderBook testBook(bookUpdateQueue, tradeQueue);
+    OrderBook testBook(tradeQueue);
 
     for (const auto& action : actions) {
         if (action.isCancel) {
@@ -89,10 +87,6 @@ RC_GTEST_PROP(OrderBookProperties, BookNeverCrosses, (const std::vector<OrderAct
         if (bestBid > 0 && bestAsk > 0) {
             RC_ASSERT(bestBid < bestAsk);
         }
-
-        // Empty the queues so they don't block
-        BookUpdate update;
-        while (bookUpdateQueue.pop(update)) {}
 
         ITradeObserver::TradeRecord trade;
         while (tradeQueue.pop(trade)) {}

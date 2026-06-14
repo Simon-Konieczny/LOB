@@ -13,11 +13,10 @@ typedef size_t rsize_t;
 
 class OrderBookTest : public ::testing::Test {
 protected:
-    SPSCQueue<BookUpdate> bookUpdateQueue_{65536};
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue_{65536};
     OrderBook book;
 
-    OrderBookTest() : book(bookUpdateQueue_, tradeQueue_) {}
+    OrderBookTest() : book(tradeQueue_) {}
 
     // Helper to extract all trades from the lock-free queue for easy assertions
     std::vector<ITradeObserver::TradeRecord> drainTrades() {

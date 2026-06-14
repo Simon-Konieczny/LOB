@@ -16,9 +16,8 @@ std::vector<double> g_latencies;
 
 static void BM_OrderBookAdd(benchmark::State& state)
 {
-    SPSCQueue<BookUpdate> bookUpdateQueue(65536);
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue(65536);
-    OrderBook book(bookUpdateQueue, tradeQueue);
+    OrderBook book(tradeQueue);
 
     // Warm up the cache and memory pool
     for (int i = 0; i < 1000; ++i)

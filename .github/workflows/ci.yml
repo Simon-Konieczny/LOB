@@ -3,8 +3,14 @@ name: Limit Order Book CI
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - '01_LOB/**'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - '01_LOB/**'
+      - '.github/workflows/ci.yml'
 
 jobs:
   build-and-bench:
@@ -15,6 +21,10 @@ jobs:
         os: [ubuntu-latest, macos-14]
 
     runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: ./01_LOB
 
     steps:
       - name: Checkout Repository
@@ -74,6 +84,10 @@ jobs:
   coverage:
     name: Code Coverage (Linux)
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./01_LOB
 
     steps:
       - name: Checkout Repository

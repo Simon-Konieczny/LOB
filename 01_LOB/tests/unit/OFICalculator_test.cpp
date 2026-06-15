@@ -16,7 +16,7 @@ protected:
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue_{1024};
     std::atomic<bool> producerDone_{false};
 
-    OFICalculator calc{bookUpdateQueue_, tradeQueue_, producerDone_};
+    OFICalculator calc{};
 };
 
 TEST_F(OFICalculatorTest, CalculatesOrderFlowImbalance) {

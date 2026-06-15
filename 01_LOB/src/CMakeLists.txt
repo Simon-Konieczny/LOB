@@ -21,3 +21,5 @@ if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 set_target_properties(lob_main PROPERTIES CLION_RC_WORKING_DIRECTORY "${PROJECT_ROOT}")
+
+target_compile_definitions(lob_main PRIVATE "PROJECT_ROOT=\"${CMAKE_SOURCE_DIR}\"")

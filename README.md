@@ -1,6 +1,8 @@
 # High-Performance Limit Order Book (C++)
 An end-to-end implementation of market microstructure mechanics, ranging from zero-allocation binary parsing of NASDAQ ITCH 5.0 market data to deterministic order matching and quantitative alpha research.
 
+See `analytics.md` for quantitative finance research.
+
 ## Executive Summary
 * **Domain Focus:** Quantitative Finance and High-Frequency Trading (HFT) Infrastructure
 * **Core Features:** Deterministic, ultra-low-latency Matching Engine designed for HFT applications along with comprehensive research suite.

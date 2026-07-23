@@ -12,11 +12,11 @@ typedef size_t rsize_t;
 class ReplayEngineTest : public ::testing::Test {
 protected:
     SPSCQueue<NormalizedMsg> msgQueue_{1024};
-    SPSCQueue<BookUpdate> bookUpdateQueue_{1024};
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue_{1024};
     std::atomic<bool> producerDone_{false};
+    OrderBook orderBook{tradeQueue_};
 
-    ReplayEngine engine{msgQueue_, producerDone_, bookUpdateQueue_, tradeQueue_};
+    ReplayEngine engine{msgQueue_, producerDone_, tradeQueue_, orderBook};
 };
 
 TEST_F(ReplayEngineTest, ProcessesAddAndCancelMessages) {

@@ -5,6 +5,7 @@ add_executable(unit_tests
         unit/SPSCQueue_test.cpp
         unit/ReplayEngine_test.cpp
         unit/OFICalculator_test.cpp
+        unit/SnapshotWriter_test.cpp
 )
 
 target_include_directories(unit_tests PRIVATE

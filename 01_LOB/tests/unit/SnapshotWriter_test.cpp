@@ -1,7 +1,6 @@
 //
-// Created by Simon Konieczny on 12/06/2026.
+// Created by Simon Konieczny on 23/07/2026.
 //
-
 #include <gtest/gtest.h>
 #include <fstream>
 #include <string>
@@ -19,7 +18,6 @@ protected:
     SPSCQueue<ITradeObserver::TradeRecord> tradeQueue_{1024};
     std::atomic<bool> producerDone_{false};
 
-    // Real instances required since SnapshotWriter takes them by const reference
     OrderBook book_{tradeQueue_};
     OFICalculator ofi_{};
 
@@ -44,10 +42,8 @@ protected:
 
     // Helper to populate the book so getBestBid() > 0 and getBestAsk() > 0
     void setupValidOrderBook() {
-        // TODO: Replace with your actual methods for pushing state into the LOB
-        // to ensure book_.getBestBid() > 0 && book_.getBestAsk() > 0.
-        // Example:
-        // book_.processMessage(NormalizedMsg{...});
+        book_.replayOrder(1, 100, 1, 1, Side::Sell, 0, STPBehavior::None);
+        book_.replayOrder(2, 102, 1, 2, Side::Buy, 100, STPBehavior::None);
     }
 };
 
@@ -56,7 +52,6 @@ protected:
 TEST_F(SnapshotWriterTest, SkipsUpdateWhenOrderBookIsInvalid) {
     SnapshotWriter writer(queue_, producerDone_, book_, ofi_, interval_ns_);
 
-    // Default initialized book_ usually has best bid/ask == 0
     writer.onBookUpdate(BookUpdate{100, 102, 10, 10, 1'000'000'000});
 
     SnapshotRow poppedRow;
@@ -65,10 +60,8 @@ TEST_F(SnapshotWriterTest, SkipsUpdateWhenOrderBookIsInvalid) {
 }
 
 TEST_F(SnapshotWriterTest, RespectsThrottlingInterval) {
-    setupValidOrderBook(); // Assume this sets bestBid and bestAsk > 0
+    setupValidOrderBook();
 
-    // If you don't have a way to easily populate OrderBook in the test environment,
-    // this test will correctly fail until you update setupValidOrderBook().
     if (book_.getBestBid() == 0 || book_.getBestAsk() == 0) {
         GTEST_SKIP() << "Skipping: setupValidOrderBook() needs actual implementation.";
     }

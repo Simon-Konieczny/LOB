@@ -8,12 +8,12 @@
 
 #include "IBookObserver.hpp"
 #include "OrderBook.hpp"
-#include <chrono>
 #include <deque>
+#include <mutex>
 
 #endif
 
-class OFICalculator : public ITradeObserver, public IBookObserver
+class OFICalculator : public IBookObserver
 {
 public:
     struct OFIEvent
@@ -22,26 +22,15 @@ public:
         int64_t value;
     };
 
-    explicit OFICalculator(SPSCQueue<BookUpdate>& bookUpdateQueue, SPSCQueue<TradeRecord>& tradeRecordQueue, std::atomic<bool>& producerDone) :
-    bookUpdateQueue_(bookUpdateQueue), tradeRecordQueue_(tradeRecordQueue), producerDone_(producerDone) {}
-
-    void runOfiCalculator();
-    void runTradeCapture();
-
-    std::deque<TradeRecord> recentTrades;
+    explicit OFICalculator() = default;
 
     [[nodiscard]] int64_t getOFI_1s() const { return rolling_1s_; }
     [[nodiscard]] int64_t getOFI_5s() const { return rolling_5s_; }
     [[nodiscard]] int64_t getOFI_30s() const { return rolling_30s_; }
-private:
+
     void onBookUpdate(const BookUpdate& update) override;
-    void onTrade(const TradeRecord& tradeRecord) override;
-
+private:
     void pruneOldEvents(uint64_t now);
-
-    SPSCQueue<BookUpdate>& bookUpdateQueue_;
-    SPSCQueue<TradeRecord>& tradeRecordQueue_;
-    std::atomic<bool>& producerDone_;
 
     std::deque<OFIEvent> history_1s_;
     std::deque<OFIEvent> history_5s_;

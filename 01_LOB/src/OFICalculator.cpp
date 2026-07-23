@@ -4,58 +4,6 @@
 
 #include "OFICalculator.hpp"
 
-void OFICalculator::runOfiCalculator()
-{
-    size_t updateCount = 0;
-    BookUpdate update = {};
-
-    while (true)
-    {
-        if (bookUpdateQueue_.pop(update))
-        {
-            onBookUpdate(update);
-            updateCount++;
-        } else
-        {
-            if (producerDone_.load(std::memory_order_acquire))
-            {
-                if (!bookUpdateQueue_.pop(update)) break;
-            }
-            #if defined(__aarch64__) || defined(__arm__)
-                        __asm__ volatile("yield" ::: "memory");
-            #else
-                        __asm__ volatile("pause" ::: "memory");
-            #endif
-        }
-    }
-}
-
-void OFICalculator::runTradeCapture()
-{
-    size_t tradeCount = 0;
-    TradeRecord tradeRecord = {};
-
-    while (true)
-    {
-        if (tradeRecordQueue_.pop(tradeRecord))
-        {
-            onTrade(tradeRecord);
-            tradeCount++;
-        } else
-        {
-            if (producerDone_.load(std::memory_order_acquire))
-            {
-                if (!tradeRecordQueue_.pop(tradeRecord)) break;
-            }
-            #if defined(__aarch64__) || defined(__arm__)
-                        __asm__ volatile("yield" ::: "memory");
-            #else
-                        __asm__ volatile("pause" ::: "memory");
-            #endif
-        }
-    }
-}
-
 void OFICalculator::onBookUpdate(const BookUpdate& update)
 {
     // Handle initial state
@@ -131,10 +79,4 @@ void OFICalculator::pruneOldEvents(uint64_t now)
         rolling_30s_ -= history_30s_.front().value;
         history_30s_.pop_front();
     }
-}
-
-void OFICalculator::onTrade(const TradeRecord& tradeRecord)
-{
-    recentTrades.push_front(tradeRecord);
-    if (recentTrades.size() > 5) recentTrades.pop_back();
 }

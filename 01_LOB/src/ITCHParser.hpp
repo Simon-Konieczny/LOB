@@ -20,7 +20,7 @@ template <typename MessageConsumer>
 class ITCHParser {
     MessageConsumer& consumer;
 public:
-    ITCHParser(MessageConsumer& cons) : consumer(cons) {}
+    explicit ITCHParser(MessageConsumer& cons) : consumer(cons) {}
 
     static inline uint16_t swap16(uint16_t val) { return __builtin_bswap16(val); }
     static inline uint32_t swap32(uint32_t val) { return __builtin_bswap32(val); }
@@ -79,7 +79,7 @@ public:
                 const auto* msg = reinterpret_cast<const ITCH5_OrderExecutedWithPrice*>(ptr);
                 uint64_t orderId = swap64(msg->orderRefNum);
 
-                if (activeTargetOrders.find(orderId) != activeTargetOrders.end()) {
+                if (activeTargetOrders.contains(orderId)) {
                     NormalizedMsg normMsg;
                     normMsg.action = MsgAction::Reduce;
                     normMsg.orderId = orderId;
@@ -96,7 +96,7 @@ public:
                 const auto* msg = reinterpret_cast<const ITCH5_OrderExecuted*>(ptr);
                 uint64_t orderId = swap64(msg->orderRefNum);
 
-                if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
+                if (activeTargetOrders.contains(orderId))
                 {
                     NormalizedMsg normMsg;
                     normMsg.action = MsgAction::Reduce;
@@ -112,9 +112,8 @@ public:
             else if (msgType == 'F')
             {
                 const auto* msg = reinterpret_cast<const ITCH5_AddOrderMPID*>(ptr);
-                std::string_view ticker(msg->stock, 8);
 
-                if (ticker == targetTicker) {
+                if (std::string_view ticker(msg->stock, 8); ticker == targetTicker) {
                     uint64_t orderId = swap64(msg->orderRefNum);
                     activeTargetOrders.insert(orderId);
 
@@ -134,9 +133,8 @@ public:
             else if (msgType == 'X')
             {
                 const auto* msg = reinterpret_cast<const ITCH5_CancelOrder*>(ptr);
-                uint64_t orderId = swap64(msg->orderRefNum);
 
-                if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
+                if (uint64_t orderId = swap64(msg->orderRefNum); activeTargetOrders.find(orderId) != activeTargetOrders.end())
                 {
                     NormalizedMsg normMsg;
                     normMsg.action = MsgAction::Reduce;
@@ -152,9 +150,8 @@ public:
             else if (msgType == 'D')
             {
                 const auto* msg = reinterpret_cast<const ITCH5_OrderDelete*>(ptr);
-                uint64_t orderId = swap64(msg->orderRefNum);
 
-                if (activeTargetOrders.find(orderId) != activeTargetOrders.end())
+                if (uint64_t orderId = swap64(msg->orderRefNum); activeTargetOrders.contains(orderId))
                 {
                     NormalizedMsg normMsg;
                     normMsg.action = MsgAction::Cancel;
@@ -170,9 +167,8 @@ public:
             else if (msgType == 'U')
             {
                 const auto* msg = reinterpret_cast<const ITCH5_OrderReplace*>(ptr);
-                uint64_t origOrderId = swap64(msg->originalOrderRefNum);
 
-                if (activeTargetOrders.find(origOrderId) != activeTargetOrders.end())
+                if (uint64_t origOrderId = swap64(msg->originalOrderRefNum); activeTargetOrders.contains(origOrderId))
                 {
                     uint64_t newOrderId = swap64(msg->newOrderRefNum);
 

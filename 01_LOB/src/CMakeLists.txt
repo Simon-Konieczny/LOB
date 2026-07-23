@@ -8,7 +8,8 @@ add_library(lob_core OrderBook.cpp
         ReplayEngine.hpp
         IBookObserver.hpp
         OFICalculator.hpp
-        OFICalculator.cpp)
+        OFICalculator.cpp
+        SnapshotWriter.hpp)
 
 # main executable
 add_executable(lob_main main.cpp)
@@ -18,3 +19,7 @@ target_link_libraries(lob_main PRIVATE lob_core)
 if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(lob_core PUBLIC stdc++)
 endif()
+
+set_target_properties(lob_main PROPERTIES CLION_RC_WORKING_DIRECTORY "${PROJECT_ROOT}")
+
+target_compile_definitions(lob_main PRIVATE "PROJECT_ROOT=\"${CMAKE_SOURCE_DIR}\"")

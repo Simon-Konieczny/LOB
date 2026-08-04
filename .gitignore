@@ -41,6 +41,7 @@
 *.dwo
 .DS_Store
 
+build
 03_data
 data
 */cmake-build-debug

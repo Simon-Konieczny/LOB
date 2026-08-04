@@ -11,6 +11,12 @@ add_library(lob_core OrderBook.cpp
         OFICalculator.cpp
         SnapshotWriter.hpp)
 
+# Include plugins directory for IAnalyticsPlugin.hpp
+ target_include_directories(lob_core 
+     PUBLIC
+     ${CMAKE_CURRENT_SOURCE_DIR}/../plugins
+ )
+
 # main executable
 add_executable(lob_main main.cpp)
 target_link_libraries(lob_main PRIVATE lob_core)

@@ -44,5 +44,6 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 enable_testing()
 add_subdirectory(src)
+add_subdirectory(plugins)
 add_subdirectory(tests)
 add_subdirectory(benchmarks)

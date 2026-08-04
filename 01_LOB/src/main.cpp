@@ -10,6 +10,7 @@
 #include "SPSCQueue.hpp"
 #include "OrderBook.hpp"
 #include "SnapshotWriter.hpp"
+#include "../plugins/PluginManager.hpp"
 #ifdef __APPLE__
 typedef size_t rsize_t;
 #endif
@@ -74,18 +75,21 @@ int main() {
     std::atomic<bool> producerDone(false);
     std::atomic<bool> engineDone(false);
 
-    OFICalculator ofiCalculator;
+    // Create the OrderBook
     OrderBook book(tradeRecordQueue);
 
-    SnapshotWriter writer(snapshotQueue, producerDone, book, ofiCalculator, 100'000'000);
-
-    book.addObserver(&ofiCalculator);
-    book.addObserver(&writer);
+    // Create and configure the PluginManager
+    PluginManager plugins(book, true);
+    
+    // Add plugins
+    OFICalculator& ofiCalculator = plugins.addPlugin<OFICalculator>();
+    SnapshotWriter& writer = plugins.addPlugin<SnapshotWriter>(
+        snapshotQueue, producerDone, book, ofiCalculator, 100'000'000);
 
     QueueProducerAdapter adapter(orderMessageQueue);
     ITCHParser<QueueProducerAdapter> parser(adapter);
-
-    std::string dataFile = "/03_data/12302019.NASDAQ_ITCH50";
+    
+    std::string dataFile = "../03_data/12302019.NASDAQ_ITCH50";
     std::string targetTicker = "AAPL    ";
     double speedMultiplier = 3000.0;
 
@@ -97,7 +101,7 @@ int main() {
     });
 
     std::thread writerThread([&]() {
-        writer.runSnapshotCapture("/03_data/lob_snapshots.csv");
+        writer.runSnapshotCapture("../03_data/lob_snapshots.csv");
     });
 
     ReplayEngine engine(orderMessageQueue, producerDone, tradeRecordQueue, book);

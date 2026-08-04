@@ -7,13 +7,24 @@
 #define LOB_OFICALCULATOR_HPP
 
 #include "IBookObserver.hpp"
+#include "../plugins/IAnalyticsPlugin.hpp"
 #include "OrderBook.hpp"
 #include <deque>
 #include <mutex>
+#include <string>
 
 #endif
 
-class OFICalculator : public IBookObserver
+/**
+ * @brief Order Flow Imbalance (OFI) Calculator Plugin.
+ * 
+ * Calculates real-time OFI signals across multiple time windows (1s, 5s, 30s).
+ * Implements the Cont et al. 2014 methodology for mid-price prediction.
+ * 
+ * This plugin observes book updates and computes OFI as:
+ * OFI = (Bid-side volume change) - (Ask-side volume change)
+ */
+class OFICalculator : public IAnalyticsPlugin
 {
 public:
     struct OFIEvent
@@ -23,6 +34,11 @@ public:
     };
 
     explicit OFICalculator() = default;
+
+    // IAnalyticsPlugin interface
+    std::string getName() const override { return "OFI Calculator"; }
+    void initialize() override {}
+    void cleanup() override {}
 
     [[nodiscard]] int64_t getOFI_1s() const { return rolling_1s_; }
     [[nodiscard]] int64_t getOFI_5s() const { return rolling_5s_; }

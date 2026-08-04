@@ -103,7 +103,7 @@ TEST_F(SnapshotWriterTest, GeneratesCorrectHeaderWhenFileOpens) {
     std::string expectedHeader = "timestamp_ns,"
                                  "bid_0,bid_vol_0,bid_1,bid_vol_1,bid_2,bid_vol_2,bid_3,bid_vol_3,bid_4,bid_vol_4,"
                                  "ask_0,ask_vol_0,ask_1,ask_vol_1,ask_2,ask_vol_2,ask_3,ask_vol_3,ask_4,ask_vol_4,"
-                                 "ofi_1s,ofi_5s,ofi_30s";
+                                 "ofi_1s,ofi_5s,ofi_30s,mid_price,micro_price";
 
     EXPECT_EQ(lines[0], expectedHeader);
 }
@@ -112,9 +112,9 @@ TEST_F(SnapshotWriterTest, WritesRowDataAccurately) {
     // Manually inject a row into the queue (bypassing onBookUpdate)
     SnapshotRow row{};
     row.timestamp_ns = 987654321;
-    row.bids = {100.5, 100.4, 100.3, 100.2, 100.1};
+    row.bids = {10050, 10040, 10030, 10020, 10010}; // Fixed-point prices (scaled by 100)
     row.bid_vols = {10, 20, 30, 40, 50};
-    row.asks = {101.1, 101.2, 101.3, 101.4, 101.5};
+    row.asks = {10110, 10120, 10130, 10140, 10150}; // Fixed-point prices (scaled by 100)
     row.ask_vols = {15, 25, 35, 45, 55};
     row.ofi_1s = 5;
     row.ofi_5s = -10;
@@ -132,9 +132,9 @@ TEST_F(SnapshotWriterTest, WritesRowDataAccurately) {
     ASSERT_EQ(lines.size(), 2); // Header + 1 Data Row
 
     std::string expectedData = "987654321,"
-                               "100.5,10,100.4,20,100.3,30,100.2,40,100.1,50," // Bids
-                               "101.1,15,101.2,25,101.3,35,101.4,45,101.5,55," // Asks
-                               "5,-10,42";                                     // OFI
+                               "10050,10,10040,20,10030,30,10020,40,10010,50," // Bids (fixed-point)
+                               "10110,15,10120,25,10130,35,10140,45,10150,55," // Asks (fixed-point)
+                               "5,-10,42,0,0";                                     // OFI
 
     EXPECT_EQ(lines[1], expectedData);
 }

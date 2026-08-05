@@ -9,7 +9,8 @@ add_library(lob_core OrderBook.cpp
         IBookObserver.hpp
         OFICalculator.hpp
         OFICalculator.cpp
-        SnapshotWriter.hpp)
+        SnapshotWriter.hpp
+        TradeExporter.hpp)
 
 # Include plugins directory for IAnalyticsPlugin.hpp
  target_include_directories(lob_core 

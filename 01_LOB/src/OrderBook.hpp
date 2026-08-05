@@ -255,8 +255,8 @@ public:
     }
 
     template<size_t N>
-    inline void getTopN(std::array<double, N>& out_bids,
-                    std::array<double, N>& out_asks,
+    inline void getTopN(std::array<int64_t, N>& out_bids,
+                    std::array<int64_t, N>& out_asks,
                     std::array<uint32_t, N>& out_bid_vols,
                     std::array<uint32_t, N>& out_ask_vols) const
     {
@@ -267,7 +267,7 @@ public:
 
         const size_t bid_limit = std::min(N, bids_.size());
         for (size_t i = 0; i < bid_limit; ++i) {
-            out_bids[i] = static_cast<double>(bids_[i]->price);
+            out_bids[i] = bids_[i]->price;
             out_bid_vols[i] = bids_[i]->getTotalVolume();
         }
 

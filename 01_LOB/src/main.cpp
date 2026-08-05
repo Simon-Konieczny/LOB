@@ -10,6 +10,7 @@
 #include "SPSCQueue.hpp"
 #include "OrderBook.hpp"
 #include "SnapshotWriter.hpp"
+#include "TradeExporter.hpp"
 #include "../plugins/PluginManager.hpp"
 #ifdef __APPLE__
 typedef size_t rsize_t;
@@ -74,6 +75,7 @@ int main() {
 
     std::atomic<bool> producerDone(false);
     std::atomic<bool> engineDone(false);
+    std::atomic<bool> tradeExporterDone(false);
 
     // Create the OrderBook
     OrderBook book(tradeRecordQueue);
@@ -85,6 +87,8 @@ int main() {
     OFICalculator& ofiCalculator = plugins.addPlugin<OFICalculator>();
     SnapshotWriter& writer = plugins.addPlugin<SnapshotWriter>(
         snapshotQueue, producerDone, book, ofiCalculator, 100'000'000);
+    TradeExporter& tradeExporter = plugins.addPlugin<TradeExporter>(
+        tradeRecordQueue, producerDone);
 
     QueueProducerAdapter adapter(orderMessageQueue);
     ITCHParser<QueueProducerAdapter> parser(adapter);
@@ -102,6 +106,10 @@ int main() {
 
     std::thread writerThread([&]() {
         writer.runSnapshotCapture("../03_data/lob_snapshots.csv");
+    });
+
+    std::thread tradeExporterThread([&]() {
+        tradeExporter.runTradeExport("../03_data/trades.csv");
     });
 
     ReplayEngine engine(orderMessageQueue, producerDone, tradeRecordQueue, book);
@@ -123,6 +131,7 @@ int main() {
 
     parserThread.join();
     writerThread.join();
+    tradeExporterThread.join();
     observerThread.join();
 
     auto snap = engine.getOrderBook().getSnapshot(10);

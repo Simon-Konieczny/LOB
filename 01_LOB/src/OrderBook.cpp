@@ -131,7 +131,7 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
 
         lastTradePrice = maker->price;
 
-        fireTradeUpdate(maker->id, taker->id, fillQty, maker->price);
+        // fireTradeUpdate(maker->id, taker->id, fillQty, maker->price);
 
         taker->quantity -= fillQty;
         maker->quantity -= fillQty;
@@ -145,6 +145,11 @@ void OrderBook::executeMatch(Order* taker, LimitLevel* level) {
 
         maker = nextMaker;
     }
+}
+
+void OrderBook::executeReplayMatch(uint32_t quantity, int64_t price, Side side, uint64_t timestamp) const
+{
+    fireTradeUpdate(0, 0, quantity, price, side, timestamp, ITradeObserver::TradeType::Replay);
 }
 
 void OrderBook::cancelOrder(uint64_t id, uint64_t timestamp) {
@@ -236,6 +241,21 @@ void OrderBook::modifyOrder(uint64_t id, int64_t newPrice, uint32_t newQuantity,
     notifyBookUpdate(timestamp);
 }
 
+void OrderBook::executeAndReduceOrder(uint64_t id, uint32_t delta, uint64_t timestamp)
+{
+    // for ITCH 5.0 Order Execute & Execute with Price
+    const auto orderIt = orderMap.find(id);
+    if (orderIt == orderMap.end()) return;
+
+    Order* order = orderIt->second;
+
+    const uint32_t newQuantity = order->quantity - delta;
+
+    // Log the execution size
+    executeReplayMatch(delta, order->price, order->side, timestamp);
+    internalReduceOrder(order, newQuantity, delta, timestamp);
+}
+
 void OrderBook::reduceOrder(uint64_t id, uint32_t delta, uint64_t timestamp)
 {
     // for ITCH 5.0 OrderCancel
@@ -249,6 +269,39 @@ void OrderBook::reduceOrder(uint64_t id, uint32_t delta, uint64_t timestamp)
     if (newQuantity == 0)
     {
         cancelOrder(id, timestamp);
+        return;
+    }
+
+    if (order->side == Side::Buy)
+    {
+        auto it = std::lower_bound(bids_.begin(), bids_.end(), order->price,
+            [](const LimitLevel* l, int64_t p) {return l->price > p;});
+
+        if (it != bids_.end() && (*it)->price == order->price)
+        {
+            (*it)->totalVolume -= delta;
+        }
+    } else
+    {
+        auto it = std::lower_bound(asks_.begin(), asks_.end(), order->price,
+            [](const LimitLevel* l, int64_t p) {return l->price < p;});
+
+        if (it != asks_.end() && (*it)->price == order->price)
+        {
+            (*it)->totalVolume -= delta;
+        }
+    }
+
+    order->quantity = newQuantity;
+
+    notifyBookUpdate(timestamp);
+}
+
+void OrderBook::internalReduceOrder(Order* order, uint64_t newQuantity, uint32_t delta, uint64_t timestamp)
+{
+    if (newQuantity == 0)
+    {
+        cancelOrder(order->id, timestamp);
         return;
     }
 
@@ -315,12 +368,15 @@ BookSnapshot OrderBook::getSnapshot(int depth) {
     return snapshot;
 }
 
-void OrderBook::fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price) const
+void OrderBook::fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price, Side side, uint64_t timestamp, ITradeObserver::TradeType tradeType) const
 {
     tradeQueue_.push(ITradeObserver::TradeRecord{
         makerId,
         takerId,
         quantity,
-        price
+        price,
+        side,
+        timestamp,
+        tradeType
         });
 }

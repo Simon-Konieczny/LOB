@@ -16,7 +16,9 @@ enum class MsgAction : uint8_t
     Add,
     Reduce,
     Cancel,
-    Replace
+    Replace,
+    Execute,
+    Trade
 };
 
 struct NormalizedMsg

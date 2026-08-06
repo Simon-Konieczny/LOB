@@ -59,7 +59,7 @@ public:
       last_ts_(0) {}
 
     // IAnalyticsPlugin interface
-    std::string getName() const override { return "Snapshot Writer"; }
+    [[nodiscard]] std::string getName() const override { return "Snapshot Writer"; }
     void initialize() override {}
     void cleanup() override {}
 

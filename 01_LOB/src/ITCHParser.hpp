@@ -81,7 +81,7 @@ public:
 
                 if (activeTargetOrders.contains(orderId)) {
                     NormalizedMsg normMsg;
-                    normMsg.action = MsgAction::Reduce;
+                    normMsg.action = MsgAction::Execute;
                     normMsg.orderId = orderId;
                     normMsg.quantity = swap32(msg->executedShares);
                     normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
@@ -99,7 +99,7 @@ public:
                 if (activeTargetOrders.contains(orderId))
                 {
                     NormalizedMsg normMsg;
-                    normMsg.action = MsgAction::Reduce;
+                    normMsg.action = MsgAction::Execute;
                     normMsg.orderId = orderId;
                     normMsg.quantity = swap32(msg->executedShares);
                     normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
@@ -185,6 +185,24 @@ public:
                     activeTargetOrders.erase(origOrderId);
                     activeTargetOrders.insert(newOrderId);
 
+                    messageCount++;
+                }
+            }
+            else if (msgType == 'P')
+            {
+                const auto* msg = reinterpret_cast<const ITCH5_TradeMessage*>(ptr);
+
+                if (std::string_view(msg->stock, 8) == targetTicker)
+                {
+                    NormalizedMsg normMsg;
+
+                    normMsg.action = MsgAction::Trade;
+                    normMsg.quantity = swap32(msg->shares);
+                    normMsg.price = static_cast<int64_t>(swap32(msg->price));
+                    normMsg.timestamp = parse48BitTimestamp(msg->timestamp);
+                    normMsg.side = (msg->side == 'B') ? Side::Buy : Side::Sell;
+
+                    consumer.onMessage(normMsg);
                     messageCount++;
                 }
             }

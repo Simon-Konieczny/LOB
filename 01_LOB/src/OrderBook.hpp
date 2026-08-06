@@ -12,8 +12,20 @@ enum class Side { Buy, Sell };
 
 class ITradeObserver {
 public:
+    enum class TradeType : uint32_t {
+        Manual,   // Trade from manual order entry (addOrder)
+        Replay,   // Trade from ITCH replay data
+        Unknown
+    };
+
     struct TradeRecord {
-        uint64_t mId; uint64_t tId; uint32_t qty; int64_t price;
+        uint64_t mId;      // Maker order ID
+        uint64_t tId;      // Taker order ID  
+        uint32_t qty;      // Quantity
+        int64_t price;     // Price
+        Side side;         // Side
+        uint64_t timestamp_ns; // Timestamp in nanoseconds
+        TradeType type;    // Trade type (Manual/Replay)
     };
 
     virtual ~ITradeObserver() = default;
@@ -228,6 +240,10 @@ public:
 
     void replaceOrder(uint64_t oldId, uint64_t newId, int64_t newPrice, uint32_t newQuantity, uint64_t timestamp);
 
+    void executeReplayMatch(uint32_t quantity, int64_t price, Side side, uint64_t timestamp) const;
+
+    void executeAndReduceOrder(uint64_t id, uint32_t delta, uint64_t timestamp);
+
     Order* getOrder(uint64_t id);
 
     int64_t getBestBid() const
@@ -302,7 +318,8 @@ private:
     void match(Order* incomingOrder);
     void executeMatch(Order* incomingOrder, LimitLevel* level);
     void internalAddOrder(Order* newOrder, uint64_t id, int64_t price, uint64_t timestamp);
-    void fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price) const;
+    void internalReduceOrder(Order* order, uint64_t newQuantity, uint32_t delta, uint64_t timestamp);
+    void fireTradeUpdate(uint64_t makerId, uint64_t takerId, uint32_t quantity, int64_t price, Side side, uint64_t timestamp, ITradeObserver::TradeType type) const;
 
     void notifyBookUpdate(const uint64_t timestamp) const
     {

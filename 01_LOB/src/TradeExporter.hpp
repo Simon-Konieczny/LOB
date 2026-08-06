@@ -21,10 +21,13 @@
  * Matches ITradeObserver::TradeRecord structure.
  */
 struct TradeRecord {
-    uint64_t makerId;
-    uint64_t takerId;
-    uint32_t quantity;
-    int64_t price;
+    uint64_t mId;      // Maker order ID
+    uint64_t tId;      // Taker order ID
+    uint32_t qty;      // Quantity
+    int64_t price;     // Price
+    Side side;         // Side
+    uint64_t timestamp_ns; // Timestamp in nanoseconds
+    ITradeObserver::TradeType type;    // Trade type (Manual/Replay)
 };
 
 /**
@@ -83,7 +86,7 @@ public:
         }
 
         // Write CSV header
-        csv_file << "maker_id,taker_id,quantity,price,timestamp_ns\n";
+        csv_file << "maker_id,taker_id,quantity,price,side,timestamp_ns,type\n";
 
         ITradeObserver::TradeRecord trade;
         uint64_t timestamp_ns = 0;
@@ -92,13 +95,7 @@ public:
         {
             if (tradeQueue_.pop(trade))
             {
-                // Use the current time as timestamp (could be enhanced with actual timestamp)
-                auto now = std::chrono::high_resolution_clock::now();
-                auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    now.time_since_epoch()).count();
-                
-                writeTrade(csv_file, trade, ns);
-                timestamp_ns = ns;
+                writeTrade(csv_file, trade);
             } else
             {
                 if (producerDone_.load(std::memory_order_acquire))
@@ -109,7 +106,7 @@ public:
                     auto now = std::chrono::high_resolution_clock::now();
                     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                         now.time_since_epoch()).count();
-                    writeTrade(csv_file, trade, ns);
+                    writeTrade(csv_file, trade);
                     break;
                 }
 
@@ -133,17 +130,19 @@ private:
      * 
      * @param file The output file stream.
      * @param trade The trade record to write.
-     * @param timestamp_ns The timestamp in nanoseconds.
      */
     static inline void writeTrade(
         std::ofstream& file, 
-        const ITradeObserver::TradeRecord& trade, 
-        uint64_t timestamp_ns)
+        const ITradeObserver::TradeRecord& trade)
     {
+        char sideChar = (trade.side == Side::Buy) ? 'B' : 'S';
+
         file << trade.mId << ","
              << trade.tId << ","
              << trade.qty << ","
              << trade.price << ","
-             << timestamp_ns << "\n";
+             << sideChar << ","
+             << trade.timestamp_ns << ","
+             << static_cast<int>(trade.type) << "\n";
     }
 };

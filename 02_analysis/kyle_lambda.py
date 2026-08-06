@@ -8,40 +8,41 @@ def calculate_kyles_lambda(trades_csv, quotes_csv):
     print("Loading data...")
 
     # Load Data
-    trades = pd.read_csv(trades_csv, parse_dates=['timestamp']).sort_values('timestamp')
-    quotes = pd.read_csv(quotes_csv, parse_dates=['timestamp']).sort_values('timestamp')
+    trades = pd.read_csv(trades_csv)
+    quotes = pd.read_csv(quotes_csv)
 
-    # Calculate mid-price for quotes
-    quotes['mid'] = (quotes['bid'] + quotes['ask']) / 2.0
+    trades['timestamp_ns'] = pd.to_datetime(trades['timestamp_ns'], unit='ns')
+    quotes['timestamp_ns'] = pd.to_datetime(quotes['timestamp_ns'], unit='ns')
 
-    print("Aligning trades with prevailing mid-price...")
+    trades = trades.sort_values('timestamp_ns')
+    quotes = quotes.sort_values('timestamp_ns')
 
     # Merge prevailing quote to each trade
-    df = pd.merge_asof(trades, quotes[['timestamp', 'mid']], 
-                       on='timestamp', direction='backward')
+    df = pd.merge_asof(trades, quotes[['timestamp_ns', 'mid_price']], 
+                       on='timestamp_ns', direction='backward')
 
     # Drop trades that happened before the first quote
-    df.dropna(subset=['mid'], inplace=True)
+    df.dropna(subset=['mid_price'], inplace=True)
 
     print("Applying Lee-Ready Rule...")
 
     # Lee-Ready Rule: Classify Trade Direction
     df['direction'] = 0
-    df.loc[df['price'] > df['mid'], 'direction'] = 1  # Buyer-initiated
-    df.loc[df['price'] < df['mid'], 'direction'] = -1 # Seller-initiated
+    df.loc[df['price'] > df['mid_price'], 'direction'] = 1  # Buyer-initiated
+    df.loc[df['price'] < df['mid_price'], 'direction'] = -1 # Seller-initiated
     
     # Handle trades exactly at the mid-price (Zero-Tick Rule)
     # Replace 0s with NaN, forward-fill the previous direction, and default to 1 if it's the first trade
     df['direction'] = df['direction'].replace(0, np.nan).ffill().fillna(1)
 
     # Compute Signed Order Flow (OF)
-    df['OF'] = df['direction'] * df['size']
+    df['OF'] = df['direction'] * df['quantity']
 
     # Compute price change (Delta Mid) 
-    df['dMid'] = df['mid'].diff().shift(-1).fillna(0) # Change to next prevailing mid
+    df['dMid'] = df['mid_price'].diff().shift(-1).fillna(0) # Change to next prevailing mid
 
     # Set timestamp as index for time-based rolling windows
-    df.set_index('timestamp', inplace=True)
+    df.set_index('timestamp_ns', inplace=True)
     
     # Filter for standard trading hours (9:30 to 16:00)
     df = df.between_time('09:30', '16:00')
@@ -54,6 +55,11 @@ def calculate_kyles_lambda(trades_csv, quotes_csv):
         'OF': 'sum',
         'dMid': 'sum'
     }).dropna()
+
+    print(f"Total 1-minute bins available: {len(resampled)}")
+    
+    if len(resampled) < 3:
+        raise ValueError("Not enough data to run OLS! You need at least a few minutes of data.")
 
     # Use Statsmodels RollingOLS
     # 30 periods of 1-minute bins = 30-minute rolling window
@@ -76,7 +82,7 @@ def calculate_kyles_lambda(trades_csv, quotes_csv):
 
 def plot_intraday_lambda(df):
     # Drop the NaN values from the initial 30-min window ramp-up
-    plot_data = df.dropna(subset=['lambda'])
+    plot_data = df.dropna(subset=['lambda']).copy()
     
     # Smooth the line slightly for visualization
     plot_data['lambda_smooth'] = plot_data['lambda'].rolling(window=5, min_periods=1).mean()
@@ -104,5 +110,4 @@ def plot_intraday_lambda(df):
     # plt.show() # Uncomment if running interactively
 
 if __name__ == "__main__":
-    calculate_kyles_lambda("trades_output.csv", "quotes_output.csv")
-    pass
+    calculate_kyles_lambda("./03_data/trades.csv", "./03_data/lob_snapshots.csv")

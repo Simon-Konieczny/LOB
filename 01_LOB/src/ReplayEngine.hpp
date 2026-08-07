@@ -86,6 +86,10 @@ private:
         case MsgAction::Replace:
             book_.replaceOrder(msg.orderId, msg.newOrderId, msg.price, msg.quantity, msg.timestamp);
             break;
+        case MsgAction::Trade:
+            book_.executeReplayMatch(msg.quantity, msg.price, msg.side, msg.timestamp);
+        case MsgAction::Execute:
+            book_.executeAndReduceOrder(msg.orderId, msg.quantity, msg.timestamp);
         }
     }
 

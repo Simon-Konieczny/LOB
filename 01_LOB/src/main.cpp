@@ -93,7 +93,7 @@ int main() {
     QueueProducerAdapter adapter(orderMessageQueue);
     ITCHParser<QueueProducerAdapter> parser(adapter);
     
-    std::string dataFile = "../03_data/12302019.NASDAQ_ITCH50";
+    std::string dataFile = "/03_data/12302019.NASDAQ_ITCH50";
     std::string targetTicker = "AAPL    ";
     double speedMultiplier = 3000.0;
 
@@ -105,11 +105,11 @@ int main() {
     });
 
     std::thread writerThread([&]() {
-        writer.runSnapshotCapture("../03_data/lob_snapshots.csv");
+        writer.runSnapshotCapture("/03_data/lob_snapshots.csv");
     });
 
     std::thread tradeExporterThread([&]() {
-        tradeExporter.runTradeExport("../03_data/trades.csv");
+        tradeExporter.runTradeExport("/03_data/trades.csv");
     });
 
     ReplayEngine engine(orderMessageQueue, producerDone, tradeRecordQueue, book);

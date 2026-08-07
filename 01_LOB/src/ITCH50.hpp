@@ -89,4 +89,18 @@ struct ITCH5_OrderExecutedWithPrice {
     char printable;
     uint32_t executionPrice;
 };
+
+struct ITCH5_TradeMessage
+{
+    char msgType;       // 'P'
+    uint16_t stockLocate;
+    uint16_t trackingNum;
+    uint8_t timestamp[6];
+    uint64_t orderRefNum;
+    char side;
+    uint32_t shares;
+    char stock[8];
+    uint32_t price;
+    uint64_t matchNumber;
+};
 #pragma pack(pop)
